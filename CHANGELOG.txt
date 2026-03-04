@@ -1,0 +1,33 @@
+SmartGuardian - Résumé des changements
+======================================
+
+AUTH & INSCRIPTION
+-----------------
+- Signup et login connectés à Supabase (public.utilisateurs, auth.users)
+- Rôles : Patient et Aidant (proche) s'inscrivent ; Admin et Médecin sont provisionnés
+- Trigger handle_new_user crée automatiquement la ligne dans utilisateurs
+- Confirmation email activée : lien envoyé avant première connexion
+- Message dédié si "email non confirmé" ou "rate limit" (trop de tentatives)
+
+BASE DE DONNÉES
+---------------
+- Schéma aligné : utilisateurs, patients, medecins, proche_patient
+- patients.maladies (array) : choix des maladies au signup (patient uniquement)
+- patients.date_naissance, utilisateurs.telephone stockés
+- Option "Autre" pour maladie : champ texte pour préciser
+
+VALIDATION DES CHAMPS
+--------------------
+- Nom complet : minimum 2 parties (Prénom Nom)
+- Email : format valide (ex. nom@domaine.com)
+- Mot de passe : minimum 6 caractères
+- Téléphone : exactement 8 chiffres
+- Date de naissance : pas de date future, max 120 ans
+- Calendrier : dates après aujourd'hui désactivées
+- Maladies (patient) : au moins une sélectionnée ; si "Autre", texte requis
+
+INTERFACE
+---------
+- Nom d'utilisateur dynamique : Bonjour {nom} depuis la base (sidebar + PatientDashboard)
+- Titre app : SmartGuardian 
+- Port dev : 5173
