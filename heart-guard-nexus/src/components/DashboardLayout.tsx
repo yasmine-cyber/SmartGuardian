@@ -73,25 +73,25 @@ interface DashboardLayoutProps {
 const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-   const [userName, setUserName] = useState<string | null>(null);
+  const [userName, setUserName] = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const location = useLocation();
   const items = navItems[role];
 
   useEffect(() => {
     const loadProfile = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
       const { data, error } = await supabase
         .from("utilisateurs")
-        .select("nom")
+        .select("nom, photo_url")
         .eq("id", user.id)
         .single();
 
-      if (!error && data?.nom) {
-        setUserName(data.nom);
+      if (!error && data) {
+        if (data.nom) setUserName(data.nom);
+        if (data.photo_url) setPhotoUrl(data.photo_url);
       }
     };
 
@@ -133,8 +133,13 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
       <div className="border-t border-sidebar-border p-4">
         <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
-          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
-            {displayInitial}
+          {/* Avatar with photo support */}
+          <div className="w-9 h-9 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0">
+            {photoUrl ? (
+              <img src={photoUrl} alt="Photo de profil" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-primary font-semibold text-sm">{displayInitial}</span>
+            )}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">

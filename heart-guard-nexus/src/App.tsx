@@ -11,6 +11,9 @@ import DoctorDashboard from "./pages/DoctorDashboard";
 import FamilyDashboard from "./pages/FamilyDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
+import ForgotPassword from "@/pages/ForgotPassword";
+import ResetPassword from "@/pages/ResetPassword";
+import PatientProfile from "@/pages/PatientProfile";
 
 const queryClient = new QueryClient();
 
@@ -28,7 +31,11 @@ const App = () => (
           <Route path="/doctor/*" element={<DoctorDashboard />} />
           <Route path="/family/*" element={<FamilyDashboard />} />
           <Route path="/admin/*" element={<AdminDashboard />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} /> 
           <Route path="*" element={<NotFound />} />
+          <Route path="/patient/profile" element={<PatientProfile />} />
+
         </Routes>
       </BrowserRouter>
     </TooltipProvider>

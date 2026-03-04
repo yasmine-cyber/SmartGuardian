@@ -174,7 +174,9 @@ const Login = () => {
                 <input type="checkbox" className="rounded border-border accent-primary" disabled={loading} />
                 Se souvenir de moi
               </label>
-              <a href="#" className="text-xs text-primary hover:underline">Mot de passe oublié ?</a>
+              <Link to="/forgot-password" className="text-xs text-primary hover:underline">
+  Mot de passe oublié ?
+</Link>
             </div>
 
             <button
