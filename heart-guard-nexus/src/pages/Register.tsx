@@ -6,10 +6,38 @@ import { supabase } from "@/lib/supabase";
 
 const steps = ["Compte", "Détails", "Confirmé"];
 
+const maladiesRef = [
+  { id: "1", nom: "Hypertension artérielle", categorie: "Cardiovasculaire" },
+  { id: "2", nom: "Insuffisance cardiaque", categorie: "Cardiovasculaire" },
+  { id: "3", nom: "Arythmie cardiaque", categorie: "Cardiovasculaire" },
+  { id: "4", nom: "Fibrillation auriculaire", categorie: "Cardiovasculaire" },
+  { id: "5", nom: "Angine de poitrine", categorie: "Cardiovasculaire" },
+  { id: "6", nom: "Diabète de type 1", categorie: "Métabolique" },
+  { id: "7", nom: "Diabète de type 2", categorie: "Métabolique" },
+  { id: "8", nom: "Obésité", categorie: "Métabolique" },
+  { id: "9", nom: "Insuffisance respiratoire", categorie: "Respiratoire" },
+  { id: "10", nom: "Apnée du sommeil", categorie: "Respiratoire" },
+  { id: "11", nom: "Épilepsie", categorie: "Neurologique" },
+  { id: "12", nom: "Maladie de Parkinson", categorie: "Neurologique" },
+  { id: "13", nom: "Alzheimer", categorie: "Neurologique" },
+  { id: "14", nom: "Insuffisance rénale", categorie: "Rénale" },
+  { id: "15", nom: "Autre", categorie: "Autre" },
+];
+
+interface FieldErrors {
+  nom?: string;
+  email?: string;
+  password?: string;
+  telephone?: string;
+  dateNaissance?: string;
+  maladies?: string;
+}
+
 const Register = () => {
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const navigate = useNavigate();
 
   // Step 0: Email, password, nom, role
@@ -21,15 +49,64 @@ const Register = () => {
   // Step 1: Additional details
   const [telephone, setTelephone] = useState("");
   const [dateNaissance, setDateNaissance] = useState("");
+  const [maladies, setMaladies] = useState<string[]>([]);
+  const [autreMaladie, setAutreMaladie] = useState("");
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setFieldErrors({});
+
+    const newErrors: FieldErrors = {};
+
+    const phoneDigits = telephone.replace(/\D/g, "");
+    if (!telephone.trim()) {
+      newErrors.telephone = "Le numéro de téléphone est obligatoire.";
+    } else if (phoneDigits.length !== 8) {
+      newErrors.telephone = "Le numéro doit contenir exactement 8 chiffres.";
+    }
+    const today = new Date();
+    today.setHours(23, 59, 59, 999);
+    const minDate = new Date(today.getFullYear() - 120, 0, 1);
+    if (!dateNaissance) {
+      newErrors.dateNaissance = "La date de naissance est obligatoire.";
+    } else {
+      const birth = new Date(dateNaissance);
+      if (birth > today) {
+        newErrors.dateNaissance = "La date ne peut pas être dans le futur.";
+      } else if (birth < minDate) {
+        newErrors.dateNaissance = "Date invalide.";
+      }
+    }
+    if (role === "patient") {
+      if (maladies.length === 0) {
+        newErrors.maladies = "Sélectionnez au moins une maladie.";
+      } else if (maladies.includes("Autre") && !autreMaladie.trim()) {
+        newErrors.maladies = "Précisez la maladie pour le choix \"Autre\".";
+      }
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setFieldErrors(newErrors);
+      return;
+    }
+
+    const maladiesToSave =
+      role === "patient"
+        ? maladies.length === 0
+          ? []
+          : maladies.map((m) =>
+              m === "Autre" && autreMaladie.trim()
+                ? `Autre: ${autreMaladie.trim()}`
+                : m
+            )
+        : null;
+
     setLoading(true);
 
     try {
       // Sign up with Supabase Auth
-      console.log("Attempting signup with:", { email, role, nom });
+      console.log("Attempting signup with:", { email, role, nom, maladies, autreMaladie });
 
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -39,13 +116,20 @@ const Register = () => {
             role,
             nom,
             telephone,
+            // On stocke aussi ces infos en metadata pour les traiter côté base
+            date_naissance: role === "patient" ? dateNaissance || null : null,
+            maladies: maladiesToSave,
           },
         },
       });
 
       if (signUpError) {
         console.error("SignUp Error:", signUpError);
-        setError(`Erreur: ${signUpError.message} (Code: ${signUpError.code || "N/A"})`);
+        if (signUpError.code === "over_email_send_rate_limit") {
+          setError("Trop de tentatives d'envoi d'email. Veuillez réessayer dans une heure.");
+        } else {
+          setError(`Erreur: ${signUpError.message} (Code: ${signUpError.code || "N/A"})`);
+        }
         setLoading(false);
         return;
       }
@@ -60,10 +144,13 @@ const Register = () => {
       }
 
       // If the user is a patient, create an entry in public.patients
-      if (role === "patient") {
+      // Attention : si la confirmation d'email est activée, il n'y a pas de session
+      // immédiatement après le signup, donc on ne peut pas écrire dans les tables protégées.
+      if (role === "patient" && data.session) {
         const { error: patientInsertError } = await supabase.from("patients").insert({
           user_id: user.id,
           date_naissance: dateNaissance || null,
+          maladies: maladiesToSave || [],
         });
 
         if (patientInsertError) {
@@ -86,7 +173,12 @@ const Register = () => {
   const handleComplete = () => navigate("/login");
 
   const canProceedStep0 = email && password && nom && password.length >= 6;
-  const canProceedStep1 = telephone && dateNaissance;
+  const canProceedStep1 =
+    telephone &&
+    dateNaissance &&
+    (role !== "patient" ||
+      (maladies.length > 0 &&
+        (!maladies.includes("Autre") || autreMaladie.trim().length > 0)));
 
   return (
     <div className="min-h-screen flex">
@@ -138,10 +230,40 @@ const Register = () => {
 
           <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
             {step === 0 && (
-              <motion.form onSubmit={(e) => {
-                e.preventDefault();
-                setStep(1);
-              }} className="space-y-4">
+              <motion.form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const newErrors: FieldErrors = {};
+
+                  const nomParts = nom.trim().split(/\s+/).filter(Boolean);
+                  if (!nom.trim()) {
+                    newErrors.nom = "Le nom complet est obligatoire.";
+                  } else if (nomParts.length < 2) {
+                    newErrors.nom = "Indiquez au moins deux parties (ex. : Prénom Nom).";
+                  }
+
+                  const trimmedEmail = email.trim();
+                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+                  if (!trimmedEmail) {
+                    newErrors.email = "L'adresse e-mail est obligatoire.";
+                  } else if (!emailRegex.test(trimmedEmail)) {
+                    newErrors.email = "Adresse e-mail invalide. Exemple : nom@domaine.com";
+                  }
+
+                  if (!password.trim()) {
+                    newErrors.password = "Le mot de passe est obligatoire.";
+                  } else if (password.length < 6) {
+                    newErrors.password = "Le mot de passe doit contenir au moins 6 caractères.";
+                  }
+
+                  setFieldErrors(newErrors);
+
+                  if (Object.keys(newErrors).length === 0) {
+                    setStep(1);
+                  }
+                }}
+                className="space-y-4"
+              >
                 <h3 className="text-lg font-semibold text-card-foreground mb-4">Choisissez votre rôle</h3>
                 <div className="grid grid-cols-2 gap-3 mb-4">
                   {[
@@ -174,6 +296,9 @@ const Register = () => {
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
                   />
                 </div>
+                {fieldErrors.nom && (
+                  <p className="text-xs text-destructive mt-1">{fieldErrors.nom}</p>
+                )}
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                   <input
@@ -184,6 +309,9 @@ const Register = () => {
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
                   />
                 </div>
+                {fieldErrors.email && (
+                  <p className="text-xs text-destructive mt-1">{fieldErrors.email}</p>
+                )}
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                   <input
@@ -194,6 +322,9 @@ const Register = () => {
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
                   />
                 </div>
+                {fieldErrors.password && (
+                  <p className="text-xs text-destructive mt-1">{fieldErrors.password}</p>
+                )}
                 <button
                   type="submit"
                   disabled={!canProceedStep0}
@@ -212,7 +343,7 @@ const Register = () => {
                 <h3 className="text-lg font-semibold text-card-foreground mb-4">
                   Informations Personnelles
                 </h3>
-                <>
+                <div className="space-y-4">
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                     <input
@@ -223,17 +354,78 @@ const Register = () => {
                       className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
                     />
                   </div>
+                  {fieldErrors.telephone && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.telephone}</p>
+                  )}
                   <div className="relative">
                     <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                     <input
                       type="date"
                       placeholder="Date de naissance"
                       value={dateNaissance}
+                      max={new Date().toISOString().split("T")[0]}
                       onChange={(e) => setDateNaissance(e.target.value)}
                       className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
                     />
                   </div>
-                </>
+                  {fieldErrors.dateNaissance && (
+                    <p className="text-xs text-destructive mt-1">{fieldErrors.dateNaissance}</p>
+                  )}
+
+                  {role === "patient" && (
+                    <div>
+                      <p className="text-base font-semibold text-card-foreground mb-3">
+                        Maladies suivies
+                      </p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto bg-muted/40 rounded-2xl p-4 border border-border/60">
+                        {maladiesRef.map((m) => {
+                          const checked = maladies.includes(m.nom);
+                          return (
+                            <label
+                              key={m.id}
+                              className="flex items-start gap-3 text-sm text-foreground cursor-pointer rounded-xl p-2 hover:bg-muted/40 transition-colors"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => {
+                                  setMaladies((prev) =>
+                                    checked
+                                      ? prev.filter((x) => x !== m.nom)
+                                      : [...prev, m.nom]
+                                  );
+                                }}
+                                className="mt-0.5 h-4 w-4 rounded border-border accent-primary"
+                              />
+                              <span className="leading-snug">{m.nom}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+
+                      {maladies.includes("Autre") && (
+                        <div className="mt-3 space-y-1">
+                          <p className="text-xs text-card-foreground font-medium">
+                            Précisez l'autre maladie
+                          </p>
+                          <input
+                            type="text"
+                            placeholder="Exemple : Maladie auto-immune rare"
+                            value={autreMaladie}
+                            onChange={(e) => setAutreMaladie(e.target.value)}
+                            className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all"
+                          />
+                        </div>
+                      )}
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Sélectionnez au moins une maladie principale liée à votre suivi.
+                      </p>
+                      {fieldErrors.maladies && (
+                        <p className="mt-1 text-xs text-destructive">{fieldErrors.maladies}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="flex gap-3 mt-6">
                   <button
                     type="button"

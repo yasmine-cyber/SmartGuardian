@@ -10,22 +10,52 @@ const Login = () => {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [emailHint, setEmailHint] = useState("");
+  const [passwordHint, setPasswordHint] = useState("");
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setEmailHint("");
+    setPasswordHint("");
+
+    // Basic client-side validation
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
+    let hasError = false;
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+    if (!trimmedEmail) {
+      setEmailHint("L'adresse e-mail est obligatoire.");
+      hasError = true;
+    } else if (!emailRegex.test(trimmedEmail)) {
+      setEmailHint("Adresse e-mail invalide. Exemple : nom@domaine.com");
+      hasError = true;
+    }
+
+    if (!trimmedPassword) {
+      setPasswordHint("Le mot de passe est obligatoire.");
+      hasError = true;
+    }
+
+    if (hasError) return;
+
     setLoading(true);
 
     try {
       // Sign in with Supabase Auth
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+        email: trimmedEmail,
+        password: trimmedPassword,
       });
 
       if (signInError) {
-        setError(signInError.message);
+        if (signInError.code === "email_not_confirmed") {
+          setError("Veuillez d'abord confirmer votre adresse e-mail en cliquant sur le lien reçu.");
+        } else {
+          setError(signInError.message);
+        }
         setLoading(false);
         return;
       }
@@ -113,6 +143,9 @@ const Login = () => {
                 className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               />
             </div>
+            {emailHint && (
+              <p className="text-xs text-destructive mt-1">{emailHint}</p>
+            )}
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
               <input
@@ -132,6 +165,9 @@ const Login = () => {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            {passwordHint && (
+              <p className="text-xs text-destructive mt-1">{passwordHint}</p>
+            )}
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs text-muted-foreground">

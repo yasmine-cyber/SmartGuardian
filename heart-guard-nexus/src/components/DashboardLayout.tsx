@@ -1,4 +1,4 @@
-import { useState, ReactNode } from "react";
+import { useEffect, useState, ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -6,6 +6,7 @@ import {
   BarChart3, MessageSquare, Shield, Cpu, FileText, Heart, MapPin,
   ChevronLeft, ChevronRight, LogOut, Menu, Wifi
 } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 
 type Role = "patient" | "doctor" | "family" | "admin";
 
@@ -72,8 +73,33 @@ interface DashboardLayoutProps {
 const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+   const [userName, setUserName] = useState<string | null>(null);
   const location = useLocation();
   const items = navItems[role];
+
+  useEffect(() => {
+    const loadProfile = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("utilisateurs")
+        .select("nom")
+        .eq("id", user.id)
+        .single();
+
+      if (!error && data?.nom) {
+        setUserName(data.nom);
+      }
+    };
+
+    loadProfile();
+  }, []);
+
+  const displayName = userName || roleNames[role];
+  const displayInitial = displayName?.charAt(0) || roleNames[role].charAt(0);
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -108,11 +134,11 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
       <div className="border-t border-sidebar-border p-4">
         <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm flex-shrink-0">
-            {roleNames[role][0]}
+            {displayInitial}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-sidebar-foreground truncate">{roleNames[role]}</p>
+              <p className="text-sm font-medium text-sidebar-foreground truncate">{displayName}</p>
               <p className="text-xs text-muted-foreground">{roleLabels[role]}</p>
             </div>
           )}

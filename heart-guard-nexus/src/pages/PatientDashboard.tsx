@@ -1,9 +1,11 @@
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { MapPin, Phone, AlertTriangle } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import VitalCard from "@/components/VitalCard";
 import LiveECGChart from "@/components/LiveECGChart";
 import StatusBadge from "@/components/StatusBadge";
+import { supabase } from "@/lib/supabase";
 
 const alerts = [
   { time: "14h14", msg: "Fréquence cardiaque élevée à 112 BPM pendant l'activité", severity: "elevated" as const },
@@ -12,13 +14,38 @@ const alerts = [
 ];
 
 const PatientDashboard = () => {
+  const [userName, setUserName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("utilisateurs")
+        .select("nom")
+        .eq("id", user.id)
+        .single();
+
+      if (!error && data?.nom) {
+        setUserName(data.nom);
+      }
+    };
+
+    loadUser();
+  }, []);
+
   return (
     <DashboardLayout role="patient">
       <div className="space-y-6 max-w-6xl">
         {/* Greeting */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Bonjour, Karim</h1>
+            <h1 className="text-2xl font-bold text-foreground">
+              Bonjour{userName ? `, ${userName}` : ""}
+            </h1>
             <p className="text-muted-foreground text-sm mt-1">Votre cœur se porte bien aujourd'hui ✓</p>
           </div>
           <StatusBadge status="normal" size="lg" />
