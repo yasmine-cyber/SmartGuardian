@@ -31,3 +31,67 @@ INTERFACE
 - Nom d'utilisateur dynamique : Bonjour {nom} depuis la base (sidebar + PatientDashboard)
 - Titre app : SmartGuardian 
 - Port dev : 5173
+
+NOUVELLES FONCTIONNALITÉS (pull récent)
+---------------------------------------
+- Routes protégées avec `ProtectedRoute` et page `Unauthorized` pour gérer l'accès selon le rôle.
+- Pages mot de passe oublié et réinitialisation : `ForgotPassword` et `ResetPassword` intégrées au flux Supabase.
+- Page `PatientProfile` : consultation des informations saisies à l'inscription (profil patient) depuis `/patient/profile`.
+
+
+
+UPDATE 
+---------------------------------------
+Un admin peut créer un compte médecin depuis le panneau d'administration.
+Supabase envoie automatiquement un email d'invitation au médecin, qui clique sur le lien pour définir son mot de passe et accéder à son espace.
+
+Fichiers touchés
+
+1. supabase/functions/create-medecin/index.ts ← NOUVEAU
+Edge Function Deno déployée sur Supabase.
+Ce qu'elle fait :
+
+Vérifie que l'appelant est authentifié et a le rôle admin
+Appelle inviteUserByEmail avec les données du médecin
+Redirige vers http://localhost:5173/set-password (à changer en prod)
+
+Points importants :
+
+Doit être déployée avec --no-verify-jwt ou JWT désactivé dans le Dashboard
+Utilise SUPABASE_SERVICE_ROLE_KEY pour les appels admin
+Le trigger handle_new_user en base crée automatiquement les entrées utilisateurs et medecins
+
+
+2. src/pages/AdminDashboard.tsx ← MODIFIÉ
+Formulaire de création médecin ajouté dans l'onglet "Utilisateurs".
+Champs du formulaire :
+
+Nom complet (obligatoire)
+E-mail (obligatoire)
+Téléphone (optionnel)
+Spécialité (obligatoire)
+Numéro de licence (obligatoire)
+
+3. src/pages/SetPassword.tsx ← NOUVEAU
+Page où le médecin définit son mot de passe après avoir cliqué le lien d'invitation.
+Ce qu'elle fait :
+
+Écoute l'événement SIGNED_IN déclenché par le token d'invitation
+Affiche un formulaire de création de mot de passe avec indicateur de force
+Redirige vers /doctor après succès
+Redirige vers /login si aucun token valide après 5 secondes
+
+
+4. src/App.tsx ← MODIFIÉ
+Route ajoutée dans <Routes> (route publique, non protégée par ProtectedRoute).
+tsximport SetPassword from "@/pages/SetPassword";
+
+// Dans <Routes> :
+<Route path="/set-password" element={<SetPassword />} />
+Pourquoi non protégée ? Le médecin n'a pas encore de session quand il arrive sur cette page — ProtectedRoute le redirigerait vers /login avant que Supabase traite le token.
+
+
+
+Config Supabase à faire pour le sign up avec Google :
+Google provider → activer + coller Client ID/Secret
+SMTP custom → à configurer plus tard (Resend, SendGrid)

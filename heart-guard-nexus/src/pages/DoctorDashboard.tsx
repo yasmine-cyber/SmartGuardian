@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { Search, Filter, Users, AlertTriangle, Activity, TrendingUp } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
 import LiveECGChart from "@/components/LiveECGChart";
+import { supabase } from "@/lib/supabase";
 
 const patients = [
   { id: 1, name: "Karim Messaoudi", age: 58, diagnosis: "Hypertension artérielle", bpm: 74, risk: "normal" as const, avatar: "K", device: "online" },
@@ -20,6 +21,30 @@ const DoctorDashboard = () => {
   const [search, setSearch] = useState("");
   const [activeFilter, setActiveFilter] = useState("Tous");
   const [selectedPatient, setSelectedPatient] = useState<number | null>(null);
+  const [doctorName, setDoctorName] = useState<string | null>(null);
+
+  useEffect(() => {
+    const loadDoctor = async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data, error } = await supabase
+        .from("utilisateurs")
+        .select("nom, prenom")
+        .eq("id", user.id)
+        .single();
+
+      if (!error && data) {
+        const fullName =
+          [data.prenom, data.nom].filter(Boolean).join(" ") || data.nom || null;
+        setDoctorName(fullName);
+      }
+    };
+
+    loadDoctor();
+  }, []);
 
   const filtered = patients.filter((p) => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
@@ -37,7 +62,9 @@ const DoctorDashboard = () => {
     <DashboardLayout role="doctor">
       <div className="space-y-6 max-w-7xl">
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-foreground">Bonjour, Dr. Moreau</h1>
+          <h1 className="text-2xl font-bold text-foreground">
+            Bonjour{doctorName ? `, ${doctorName}` : ""}
+          </h1>
           <p className="text-muted-foreground text-sm mt-1">{patients.filter((p) => p.risk === "critical").length} patient(s) critique(s) nécessitant votre attention</p>
         </motion.div>
 

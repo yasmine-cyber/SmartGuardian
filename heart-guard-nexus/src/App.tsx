@@ -16,6 +16,13 @@ import ResetPassword from "@/pages/ResetPassword";
 import PatientProfile from "@/pages/PatientProfile";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Unauthorized from "@/pages/Unauthorized";
+import SetPassword from "@/pages/SetPassword";
+
+
+
+
+
+
 
 const queryClient = new QueryClient();
 
@@ -32,6 +39,8 @@ const App = () => (
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
+          {/* pour medecin - invite only, protected via initialHash check in SetPassword.tsx */}
+          <Route path="/set-password" element={<SetPassword />} /> 
           <Route path="/unauthorized" element={<Unauthorized />} />
 
           {/* Protected routes */}
