@@ -95,3 +95,153 @@ Pourquoi non protégée ? Le médecin n'a pas encore de session quand il arrive 
 Config Supabase à faire pour le sign up avec Google :
 Google provider → activer + coller Client ID/Secret
 SMTP custom → à configurer plus tard (Resend, SendGrid)
+### SmartGuardian – Authentification Google (Travail réalisé)
+
+**1. Configuration Google OAuth (Google Cloud Console)**
+
+* Accès à **Google Cloud Console** : https://console.cloud.google.com
+* Création d’un **projet** pour l’application *SmartGuardian*.
+* Configuration de **l’écran de consentement OAuth** :
+
+  * Type d’utilisateur : **Externe**
+  * Nom de l’application : *SmartGuardian*
+  * Email support : email du développeur
+  * Ajout de l’email développeur dans **Test Users**.
+* Création d’un **OAuth 2.0 Client ID** :
+
+  * Type : **Web Application**
+  * **Authorized JavaScript Origins** :
+
+    ```
+    http://localhost:5173
+    ```
+  * **Authorized Redirect URI** :
+
+    ```
+    https://<project-id>.supabase.co/auth/v1/callback
+    ```
+* Récupération du **Client ID** et **Client Secret** générés par Google.
+
+---
+
+**2. Configuration dans Supabase**
+
+Dans le **Supabase Dashboard** :
+
+* Aller dans :
+
+  ```
+  Authentication → Providers → Google
+  ```
+* Activer le provider **Google**.
+* Ajouter :
+
+  * **Client ID**
+  * **Client Secret**
+* Sauvegarder la configuration.
+
+Puis dans :
+
+```
+Authentication → URL Configuration
+Ajout de l’URL de redirection locale :
+
+http://localhost:5173/auth/callback
+
+**3. Intégration côté Frontend (React)**
+
+Ajout du bouton **“Continuer avec Google”** dans :
+
+* `Login.tsx`
+* `Register.tsx`
+
+Utilisation de la fonction Supabase :
+
+supabase.auth.signInWithOAuth({
+  provider: "google",
+  options: {
+    redirectTo: `${window.location.origin}/auth/callback`,
+  },
+});
+```
+
+Cette fonction redirige l’utilisateur vers Google pour l’authentification.
+
+---
+
+**4. Gestion du retour OAuth**
+
+Création de la page :
+
+```
+src/pages/AuthCallback.tsx
+```
+
+Cette page :
+
+1. Récupère la session Supabase après authentification Google.
+2. Vérifie si l’utilisateur existe dans la table `utilisateurs`.
+3. Si l’utilisateur n’existe pas :
+
+   * création d’un nouvel utilisateur dans la table `utilisateurs`
+   * rôle par défaut : **patient**
+   * récupération du **nom depuis Google metadata**.
+4. Redirection vers le **dashboard correspondant au rôle**.
+
+---
+
+**5. Gestion des profils incomplets**
+
+Constat : Google ne fournit que :
+
+* email
+* nom complet
+
+Les autres informations (téléphone, date de naissance, maladies) ne sont pas disponibles.
+
+Solution :
+
+Création de la page :
+
+```
+src/pages/CompleteProfile.tsx
+```
+
+Cette page permet à l’utilisateur Google de compléter les informations manquantes avant d’accéder au dashboard.
+
+**6. Ajout des routes**
+
+Dans `App.tsx` :
+
+```
+/auth/callback
+/complete-profile
+```
+
+Ces routes permettent :
+
+* le traitement du retour OAuth
+* la complétion du profil utilisateur.
+
+---
+
+**Résultat**
+
+Le système permet maintenant :
+
+* connexion classique (email + mot de passe)
+* connexion / inscription via **Google**
+* création automatique d’un utilisateur dans la base
+* complétion du profil si certaines informations sont manquantes
+* redirection vers le dashboard selon le rôle.
+Mise à jour du Doctor Dashboard
+
+Au début, le DoctorDashboard utilisait des données statiques (hardcodées) pour afficher les patients et les statistiques.
+
+Le fichier DoctorDashboard.tsx a été modifié pour remplacer ces données par des données réelles provenant de Supabase.
+
+Les patients sont maintenant récupérés depuis la table patients (liée à utilisateurs) en filtrant par medecin_id afin d’afficher uniquement les patients associés au médecin connecté.
+
+Les statistiques du dashboard (nombre de patients, alertes, etc.) sont également calculées dynamiquement à partir des tables patients et alertes.
+
+Ainsi, le dashboard médecin affiche désormais des informations réelles de la base de données au lieu de données fictives.
