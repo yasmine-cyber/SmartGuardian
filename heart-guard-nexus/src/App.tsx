@@ -17,10 +17,8 @@ import PatientProfile from "@/pages/PatientProfile";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Unauthorized from "@/pages/Unauthorized";
 import SetPassword from "@/pages/SetPassword";
-
-
-
-
+import AuthCallback from "@/pages/AuthCallback";
+import CompleteProfile from "@/pages/CompleteProfile";
 
 
 
@@ -53,6 +51,8 @@ const App = () => (
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/complete-profile" element={<CompleteProfile />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
