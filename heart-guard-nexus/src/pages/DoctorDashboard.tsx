@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Users, AlertTriangle, Activity, TrendingUp, Bell, CheckCircle, Loader, Save } from "lucide-react";
+import { Search, Users, AlertTriangle, Activity, TrendingUp, Bell, CheckCircle, Loader, Save, XCircle } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
 import LiveECGChart from "@/components/LiveECGChart";
 import { supabase } from "@/lib/supabase";
 
-type Tab = "patients" | "alertes";
+type Tab = "patients" | "alertes" | "demandes";
 
 interface Patient {
   id: string;
@@ -33,13 +33,25 @@ interface Alerte {
   patient_nom?: string;
 }
 
+interface Demande {
+  id: string;
+  patient_id: string;
+  statut: string;
+  created_at: string;
+  patients: {
+    id: string;
+    utilisateurs: {
+      nom: string;
+      prenom: string;
+      telephone: string | null;
+    } | null;
+  } | null;
+}
+
 const SEVERITY_COLORS: Record<string, string> = {
-  critical: "bg-red-500/10 text-red-500 border-red-500/20",
-  elevated: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  normal: "bg-green-500/10 text-green-500 border-green-500/20",
-  faible: "bg-green-500/10 text-green-500 border-green-500/20",
-  modere: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
-  severe: "bg-red-500/10 text-red-500 border-red-500/20",
+  CRITIQUE: "bg-red-500/10 text-red-500 border-red-500/20",
+  MOYEN: "bg-yellow-500/10 text-yellow-500 border-yellow-500/20",
+  FAIBLE: "bg-green-500/10 text-green-500 border-green-500/20",
 };
 
 const filterTabs = ["Tous", "Stable", "Surveillance", "Critique"];
@@ -50,22 +62,22 @@ const DoctorDashboard = () => {
   const [activeFilter, setActiveFilter] = useState("Tous");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [doctorName, setDoctorName] = useState<string | null>(null);
-  const [medecinId, setMedecinId] = useState<string | null>(null);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [alertes, setAlertes] = useState<Alerte[]>([]);
+  const [demandes, setDemandes] = useState<Demande[]>([]);
   const [loadingPatients, setLoadingPatients] = useState(true);
   const [loadingAlertes, setLoadingAlertes] = useState(true);
+  const [loadingDemandes, setLoadingDemandes] = useState(true);
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
 
-  // Load doctor info + patients + alertes
   useEffect(() => {
     const init = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Get doctor info
+      // Get doctor name
       const { data: util } = await supabase
         .from("utilisateurs")
         .select("nom, prenom")
@@ -75,16 +87,6 @@ const DoctorDashboard = () => {
       if (util) {
         setDoctorName([util.prenom, util.nom].filter(Boolean).join(" ") || util.nom);
       }
-
-      // Get medecin id
-      const { data: med } = await supabase
-        .from("medecins")
-        .select("id")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!med) return;
-      setMedecinId(med.id);
 
       // Load patients assigned to this doctor
       const { data: patientsData } = await supabase
@@ -100,7 +102,7 @@ const DoctorDashboard = () => {
           status,
           utilisateurs!patients_user_id_fkey (nom, prenom, telephone)
         `)
-        .eq("medecin_id", med.id);
+        .eq("medecin_id", user.id);
 
       if (patientsData) {
         const mapped = patientsData.map((p: any) => ({
@@ -114,42 +116,67 @@ const DoctorDashboard = () => {
           adresse: p.adresse || "",
           antecedents: p.antecedents || "",
           notes_medecin: p.notes_medecin || "",
-          status: p.status || "normal",
+          status: p.status || "offline",
         }));
         setPatients(mapped);
-      }
-      setLoadingPatients(false);
 
-      // Load alertes for doctor's patients
-      if (patientsData && patientsData.length > 0) {
-        const patientIds = patientsData.map((p: any) => p.id);
-        const { data: alertesData } = await supabase
-          .from("alertes")
-          .select("*")
-          .in("patient_id", patientIds)
-          .order("created_at", { ascending: false });
+        if (mapped.length > 0) {
+          const patientIds = patientsData.map((p: any) => p.id);
+          const { data: alertesData } = await supabase
+            .from("alerts")
+            .select("*")
+            .in("patient_id", patientIds)
+            .order("created_at", { ascending: false });
 
-        if (alertesData) {
-          // Attach patient names to alerts
-          const alertesMapped = alertesData.map((a: any) => {
-            const patient = patientsData.find((p: any) => p.id === a.patient_id) as any;
-            return {
-              ...a,
-              patient_nom: patient
-                ? [patient.utilisateurs?.prenom, patient.utilisateurs?.nom].filter(Boolean).join(" ")
-                : "Inconnu",
-            };
-          });
-          setAlertes(alertesMapped);
+          if (alertesData) {
+            const alertesMapped = alertesData.map((a: any) => {
+              const patient = patientsData.find((p: any) => p.id === a.patient_id) as any;
+              return {
+                ...a,
+                patient_nom: patient
+                  ? [patient.utilisateurs?.prenom, patient.utilisateurs?.nom].filter(Boolean).join(" ")
+                  : "Inconnu",
+              };
+            });
+            setAlertes(alertesMapped);
+          }
         }
       }
+
+      setLoadingPatients(false);
       setLoadingAlertes(false);
+
+      // ✅ Step 1: fetch demandes flat (no nested join)
+      const { data: demandesRaw } = await supabase
+        .from("demandes")
+        .select("id, patient_id, statut, created_at")
+        .eq("medecin_id", user.id)
+        .eq("statut", "en_attente");
+
+      if (demandesRaw && demandesRaw.length > 0) {
+        const patientIds = demandesRaw.map((d: any) => d.patient_id);
+
+        // ✅ Step 2: fetch patient info separately
+        const { data: patientsInfo } = await supabase
+          .from("patients")
+          .select("id, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
+          .in("id", patientIds);
+
+        // ✅ Step 3: merge
+        const merged = demandesRaw.map((d: any) => ({
+          ...d,
+          patients: patientsInfo?.find((p: any) => p.id === d.patient_id) || null,
+        }));
+
+        setDemandes(merged as unknown as Demande[]);
+      }
+
+      setLoadingDemandes(false);
     };
 
     init();
   }, []);
 
-  // Sync notes when patient changes
   useEffect(() => {
     if (selectedPatient) {
       setNotes(selectedPatient.notes_medecin || "");
@@ -178,23 +205,41 @@ const DoctorDashboard = () => {
   const handleResolveAlerte = async (alerteId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     await supabase
-      .from("alertes")
+      .from("alerts")
       .update({ resolved: true, resolved_by: user?.id, resolved_at: new Date().toISOString() })
       .eq("id", alerteId);
     setAlertes((prev) => prev.map((a) => a.id === alerteId ? { ...a, resolved: true } : a));
+  };
+
+  const handleDemande = async (demandeId: string, patientRowId: string, action: "approuvee" | "refusee") => {
+    await supabase
+      .from("demandes")
+      .update({ statut: action, updated_at: new Date().toISOString() })
+      .eq("id", demandeId);
+
+    if (action === "approuvee") {
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase
+        .from("patients")
+        .update({ medecin_id: user?.id, updated_at: new Date().toISOString() })
+        .eq("id", patientRowId);
+    }
+
+    setDemandes((prev) => prev.filter((d) => d.id !== demandeId));
   };
 
   const filtered = patients.filter((p) => {
     const fullName = `${p.prenom} ${p.nom}`.toLowerCase();
     const matchSearch = fullName.includes(search.toLowerCase());
     if (activeFilter === "Tous") return matchSearch;
-    if (activeFilter === "Stable") return matchSearch && p.status === "normal";
-    if (activeFilter === "Surveillance") return matchSearch && p.status === "elevated";
+    if (activeFilter === "Stable") return matchSearch && p.status === "stable";
+    if (activeFilter === "Surveillance") return matchSearch && p.status === "attention";
     if (activeFilter === "Critique") return matchSearch && p.status === "critical";
     return matchSearch;
   });
 
   const unresolvedAlertes = alertes.filter((a) => !a.resolved);
+
   const age = (dob: string) => {
     if (!dob) return "—";
     return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
@@ -220,7 +265,7 @@ const DoctorDashboard = () => {
             { icon: Users, label: "Patients suivis", value: patients.length.toString(), color: "text-primary" },
             { icon: AlertTriangle, label: "Alertes actives", value: unresolvedAlertes.length.toString(), color: "text-red-500" },
             { icon: Activity, label: "État critique", value: patients.filter(p => p.status === "critical").length.toString(), color: "text-safe" },
-            { icon: TrendingUp, label: "Sous surveillance", value: patients.filter(p => p.status === "elevated").length.toString(), color: "text-yellow-500" },
+            { icon: TrendingUp, label: "Sous surveillance", value: patients.filter(p => p.status === "attention").length.toString(), color: "text-yellow-500" },
           ].map((s, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
               className="bg-card border border-border rounded-2xl p-4 shadow-sm">
@@ -236,6 +281,7 @@ const DoctorDashboard = () => {
           {[
             { id: "patients", label: "Patients", icon: Users },
             { id: "alertes", label: `Alertes${unresolvedAlertes.length > 0 ? ` (${unresolvedAlertes.length})` : ""}`, icon: Bell },
+            { id: "demandes", label: `Demandes${demandes.length > 0 ? ` (${demandes.length})` : ""}`, icon: Users },
           ].map((tab) => {
             const Icon = tab.icon;
             return (
@@ -402,7 +448,6 @@ const DoctorDashboard = () => {
           {activeTab === "alertes" && (
             <motion.div key="alertes" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="space-y-3">
-
               {loadingAlertes ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader className="w-6 h-6 text-primary animate-spin" />
@@ -415,7 +460,6 @@ const DoctorDashboard = () => {
                 </div>
               ) : (
                 <>
-                  {/* Unresolved first */}
                   {unresolvedAlertes.length > 0 && (
                     <div>
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
@@ -425,8 +469,8 @@ const DoctorDashboard = () => {
                         {unresolvedAlertes.map((a) => (
                           <motion.div key={a.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
                             className="bg-card border border-border rounded-2xl p-4 flex items-start gap-4">
-                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full border flex-shrink-0 ${SEVERITY_COLORS[a.severity] || SEVERITY_COLORS.normal}`}>
-                              {a.severity?.toUpperCase()}
+                            <span className={`text-xs font-medium px-2.5 py-1 rounded-full border flex-shrink-0 ${SEVERITY_COLORS[a.severity] || SEVERITY_COLORS.FAIBLE}`}>
+                              {a.severity}
                             </span>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground">{a.patient_nom}</p>
@@ -444,18 +488,14 @@ const DoctorDashboard = () => {
                       </div>
                     </div>
                   )}
-
-                  {/* Resolved */}
                   {alertes.filter(a => a.resolved).length > 0 && (
                     <div className="mt-4">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                        Résolues
-                      </p>
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Résolues</p>
                       <div className="space-y-2">
                         {alertes.filter(a => a.resolved).map((a) => (
                           <div key={a.id} className="bg-muted/30 border border-border/50 rounded-2xl p-4 flex items-start gap-4 opacity-60">
                             <span className="text-xs font-medium px-2.5 py-1 rounded-full border bg-muted text-muted-foreground flex-shrink-0">
-                              {a.severity?.toUpperCase()}
+                              {a.severity}
                             </span>
                             <div className="flex-1 min-w-0">
                               <p className="text-sm font-medium text-foreground">{a.patient_nom}</p>
@@ -474,6 +514,56 @@ const DoctorDashboard = () => {
               )}
             </motion.div>
           )}
+
+          {/* DEMANDES TAB */}
+          {activeTab === "demandes" && (
+            <motion.div key="demandes" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="space-y-3">
+              {loadingDemandes ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader className="w-6 h-6 text-primary animate-spin" />
+                </div>
+              ) : demandes.length === 0 ? (
+                <div className="text-center py-16 bg-card border border-border rounded-2xl">
+                  <CheckCircle className="w-10 h-10 text-green-500 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-foreground">Aucune demande en attente</p>
+                  <p className="text-xs text-muted-foreground mt-1">Aucun patient ne vous a sollicité</p>
+                </div>
+              ) : (
+                demandes.map((d) => {
+                  const u = d.patients?.utilisateurs;
+                  const fullName = [u?.prenom, u?.nom].filter(Boolean).join(" ") || "—";
+                  return (
+                    <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                      className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0 text-sm">
+                        {fullName.charAt(0)}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{fullName}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {u?.telephone || "Pas de téléphone"} • {new Date(d.created_at).toLocaleDateString("fr-FR")}
+                        </p>
+                      </div>
+                      <div className="flex gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleDemande(d.id, d.patients?.id!, "approuvee")}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 rounded-xl text-xs font-medium hover:bg-green-500/20 transition-all">
+                          <CheckCircle className="w-3.5 h-3.5" /> Accepter
+                        </button>
+                        <button
+                          onClick={() => handleDemande(d.id, d.patients?.id!, "refusee")}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive/10 text-destructive rounded-xl text-xs font-medium hover:bg-destructive/20 transition-all">
+                          <XCircle className="w-3.5 h-3.5" /> Refuser
+                        </button>
+                      </div>
+                    </motion.div>
+                  );
+                })
+              )}
+            </motion.div>
+          )}
+
         </AnimatePresence>
       </div>
     </DashboardLayout>

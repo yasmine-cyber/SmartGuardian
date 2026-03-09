@@ -19,6 +19,7 @@ import Unauthorized from "@/pages/Unauthorized";
 import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
+import MesMedecins from "@/pages/MesMedecins";
 
 
 
@@ -44,6 +45,7 @@ const App = () => (
           {/* Protected routes */}
           <Route path="/patient" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
           <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
+          <Route path="/patient/medecins" element={<ProtectedRoute allowedRoles={["patient"]}><MesMedecins /></ProtectedRoute>} />
           <Route path="/patient/*" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
           <Route path="/doctor/*" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
           <Route path="/family/*" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />

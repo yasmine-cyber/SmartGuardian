@@ -13,7 +13,7 @@ type Utilisateur = {
   telephone: string | null;
 };
 
-const devices = [
+const devices_mock = [
   { id: "ESP32-001", patient: "Karim Messaoudi", battery: 87, signal: 3, status: "online", lastSync: "il y a 4s" },
   { id: "ESP32-002", patient: "Fatima Chérif", battery: 23, signal: 0, status: "offline", lastSync: "il y a 3 jours" },
   { id: "ESP32-003", patient: "Mohamed Brahimi", battery: 65, signal: 2, status: "online", lastSync: "il y a 1 min" },
@@ -51,6 +51,69 @@ const AdminDashboard = () => {
 
   const queryClient = useQueryClient();
 
+  // ✅ Dynamic stat: patients actifs
+  const { data: patientsActifs } = useQuery({
+    queryKey: ["stat-patients-actifs"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("patients")
+        .select("*", { count: "exact", head: true })
+        .neq("status", "offline");
+      return count ?? 0;
+    },
+  });
+
+  // ✅ Dynamic stat: capteurs en ligne
+  const { data: capteursEnLigne } = useQuery({
+    queryKey: ["stat-capteurs-enligne"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("devices")
+        .select("*", { count: "exact", head: true })
+        .eq("actif", true);
+      return count ?? 0;
+    },
+  });
+
+  // ✅ Dynamic stat: capteurs hors ligne
+  const { data: capteursHorsLigne } = useQuery({
+    queryKey: ["stat-capteurs-horsligne"],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from("devices")
+        .select("*", { count: "exact", head: true })
+        .eq("actif", false);
+      return count ?? 0;
+    },
+  });
+
+  // ✅ Dynamic stat: alertes 24h
+  const { data: alertes24h } = useQuery({
+    queryKey: ["stat-alertes-24h"],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count } = await supabase
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", since);
+      return count ?? 0;
+    },
+  });
+
+  // ✅ Dynamic stat: alertes critiques 24h
+  const { data: alertesCritiques } = useQuery({
+    queryKey: ["stat-alertes-critiques"],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      const { count } = await supabase
+        .from("alerts")
+        .select("*", { count: "exact", head: true })
+        .gte("created_at", since)
+        .eq("severity", "CRITIQUE");
+      return count ?? 0;
+    },
+  });
+
   const {
     data: users,
     isLoading: usersLoading,
@@ -62,11 +125,7 @@ const AdminDashboard = () => {
         .from("utilisateurs")
         .select("id, nom, email, role, telephone")
         .order("nom", { ascending: true });
-
-      if (error) {
-        throw error;
-      }
-
+      if (error) throw error;
       return (data || []) as Utilisateur[];
     },
   });
@@ -122,29 +181,14 @@ const AdminDashboard = () => {
           numero_licence: createForm.numero_licence.trim(),
         },
       });
-      
-      // 👇 ADD THESE
-      console.log("data:", JSON.stringify(data));
-      console.log("error:", JSON.stringify(error));
-      
+
       if (error || data?.error) {
         setCreateError(data?.error || error?.message || "Erreur lors de la création du médecin.");
         return;
       }
 
-      if (error) {
-        setCreateError(error.message || "Erreur lors de la création du médecin.");
-        return;
-      }
-
       setCreateSuccess("Médecin créé. Une invitation a été envoyée automatiquement par e-mail.");
-      setCreateForm({
-        nom: "",
-        email: "",
-        telephone: "",
-        specialite: "",
-        numero_licence: "",
-      });
+      setCreateForm({ nom: "", email: "", telephone: "", specialite: "", numero_licence: "" });
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
     } catch (err) {
       setCreateError("Erreur inattendue lors de la création du médecin.");
@@ -161,13 +205,33 @@ const AdminDashboard = () => {
           <p className="text-muted-foreground text-sm mt-1">Vue système & gestion</p>
         </motion.div>
 
-        {/* KPI */}
+        {/* ✅ Dynamic KPI */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
-            { icon: Users, label: "Patients actifs", value: "142", sub: "+5 cette semaine" },
-            { icon: Cpu, label: "Capteurs en ligne", value: "89", sub: "3 hors ligne" },
-            { icon: Activity, label: "Alertes (24h)", value: "17", sub: "2 critiques" },
-            { icon: Clock, label: "Uptime système", value: "99.98%", sub: "30 derniers jours" },
+            {
+              icon: Users,
+              label: "Patients actifs",
+              value: patientsActifs?.toString() ?? "...",
+              sub: "statut non offline",
+            },
+            {
+              icon: Cpu,
+              label: "Capteurs en ligne",
+              value: capteursEnLigne?.toString() ?? "...",
+              sub: `${capteursHorsLigne ?? "..."} hors ligne`,
+            },
+            {
+              icon: Activity,
+              label: "Alertes (24h)",
+              value: alertes24h?.toString() ?? "...",
+              sub: `${alertesCritiques ?? "..."} critiques`,
+            },
+            {
+              icon: Clock,
+              label: "Uptime système",
+              value: "99.98%",
+              sub: "30 derniers jours",
+            },
           ].map((s, i) => (
             <motion.div key={i} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }} className="bg-card border border-border rounded-2xl p-4 shadow-sm">
               <s.icon className="w-5 h-5 text-primary mb-2" />
@@ -224,78 +288,36 @@ const AdminDashboard = () => {
                   <form onSubmit={handleCreateMedecin} className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">Nom complet</label>
-                      <input
-                        type="text"
-                        value={createForm.nom}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, nom: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
-                        placeholder="Dr Prénom Nom"
-                      />
+                      <input type="text" value={createForm.nom} onChange={(e) => setCreateForm((f) => ({ ...f, nom: e.target.value }))} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" placeholder="Dr Prénom Nom" />
                     </div>
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">E-mail</label>
-                      <input
-                        type="email"
-                        value={createForm.email}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
-                        placeholder="medecin@clinique.dz"
-                      />
+                      <input type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" placeholder="medecin@clinique.dz" />
                     </div>
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">Téléphone</label>
-                      <input
-                        type="tel"
-                        value={createForm.telephone}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, telephone: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
-                        placeholder="+213..."
-                      />
+                      <input type="tel" value={createForm.telephone} onChange={(e) => setCreateForm((f) => ({ ...f, telephone: e.target.value }))} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" placeholder="+213..." />
                     </div>
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">Spécialité</label>
-                      <input
-                        type="text"
-                        value={createForm.specialite}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, specialite: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
-                        placeholder="Cardiologue, Généraliste..."
-                      />
+                      <input type="text" value={createForm.specialite} onChange={(e) => setCreateForm((f) => ({ ...f, specialite: e.target.value }))} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" placeholder="Cardiologue, Généraliste..." />
                     </div>
                     <div>
                       <label className="block text-xs text-muted-foreground mb-1">Numéro de licence</label>
-                      <input
-                        type="text"
-                        value={createForm.numero_licence}
-                        onChange={(e) => setCreateForm((f) => ({ ...f, numero_licence: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50"
-                        placeholder="Identifiant ordre / licence"
-                      />
+                      <input type="text" value={createForm.numero_licence} onChange={(e) => setCreateForm((f) => ({ ...f, numero_licence: e.target.value }))} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50" placeholder="Identifiant ordre / licence" />
                     </div>
-
                     <div className="md:col-span-2 flex flex-col gap-2 items-start md:items-end">
-                      {createError && (
-                        <p className="text-xs text-destructive text-left w-full">{createError}</p>
-                      )}
-                      {createSuccess && (
-                        <p className="text-xs text-safe text-left w-full">{createSuccess}</p>
-                      )}
-                      <button
-                        type="submit"
-                        disabled={createLoading}
-                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-                      >
+                      {createError && <p className="text-xs text-destructive text-left w-full">{createError}</p>}
+                      {createSuccess && <p className="text-xs text-safe text-left w-full">{createSuccess}</p>}
+                      <button type="submit" disabled={createLoading} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
                         {createLoading ? "Création..." : "Créer le médecin"}
                       </button>
                     </div>
                   </form>
                 </div>
               )}
-              {usersError && (
-                <p className="px-4 py-3 text-sm text-destructive">
-                  Impossible de charger les utilisateurs.
-                </p>
-              )}
+
+              {usersError && <p className="px-4 py-3 text-sm text-destructive">Impossible de charger les utilisateurs.</p>}
               {usersLoading ? (
                 <p className="px-4 py-3 text-sm text-muted-foreground">Chargement des utilisateurs...</p>
               ) : (
@@ -303,38 +325,24 @@ const AdminDashboard = () => {
                   <thead>
                     <tr className="border-b border-border">
                       {["Nom", "E-mail", "Rôle", "Téléphone"].map((h) => (
-                        <th key={h} className="text-left text-xs font-medium text-muted-foreground px-4 py-3">
-                          {h}
-                        </th>
+                        <th key={h} className="text-left text-xs font-medium text-muted-foreground px-4 py-3">{h}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.map((u) => (
-                      <tr
-                        key={u.id}
-                        className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors"
-                      >
+                      <tr key={u.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
                         <td className="px-4 py-3 text-sm font-medium text-card-foreground">{u.nom}</td>
                         <td className="px-4 py-3 text-sm text-muted-foreground">{u.email}</td>
                         <td className="px-4 py-3">
-                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">
-                            {u.role}
-                          </span>
+                          <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-primary/10 text-primary capitalize">{u.role}</span>
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {u.telephone || "—"}
-                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">{u.telephone || "—"}</td>
                       </tr>
                     ))}
                     {filteredUsers.length === 0 && !usersError && (
                       <tr>
-                        <td
-                          colSpan={4}
-                          className="px-4 py-6 text-sm text-muted-foreground text-center"
-                        >
-                          Aucun utilisateur trouvé.
-                        </td>
+                        <td colSpan={4} className="px-4 py-6 text-sm text-muted-foreground text-center">Aucun utilisateur trouvé.</td>
                       </tr>
                     )}
                   </tbody>
@@ -345,7 +353,7 @@ const AdminDashboard = () => {
 
           {tab === "devices" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {devices.map((d) => (
+              {devices_mock.map((d) => (
                 <div key={d.id} className="bg-card border border-border rounded-2xl p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">

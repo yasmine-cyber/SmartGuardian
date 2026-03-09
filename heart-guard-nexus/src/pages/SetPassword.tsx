@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Heart, Lock, Eye, EyeOff, AlertCircle, Loader, CheckCircle } from "lucide-react";
@@ -16,9 +16,18 @@ const SetPassword = () => {
   const [done, setDone] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
   const navigate = useNavigate();
+  // ✅ Captured fresh on every mount — resets on each navigation
+  const hashRef = useRef(window.location.hash);
 
   useEffect(() => {
-    // ✅ Redirect to /login after 5s if no valid invite token
+    const isInviteLink =
+      hashRef.current.includes("access_token") && hashRef.current.includes("type=invite");
+
+    if (!isInviteLink) {
+      navigate("/login"); // ← no valid invite token → redirect immediately
+      return;
+    }
+
     const timeout = setTimeout(() => {
       navigate("/login");
     }, 5000);
