@@ -65,8 +65,8 @@ const Index = () => {
             <Link to="/login" className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-4 py-2">
               Connexion
             </Link>
-            <Link to="/login" className="text-sm font-semibold bg-sky-900 text-white px-5 py-2.5 rounded-full hover:brightness-110 transition-all shadow-md">
-              Commencer
+            <Link to="/register" className="text-sm font-semibold bg-sky-900 text-white px-5 py-2.5 rounded-full hover:brightness-110 transition-all shadow-md">
+              S'inscrire
             </Link>
           </div>
         </div>
@@ -142,7 +142,7 @@ const Index = () => {
               </p>
               <div className="flex flex-wrap gap-4 justify-center lg:justify-start">
                 <Link
-                  to="/login"
+                  to="/register"
                   className="inline-flex items-center gap-2 bg-sky-900 text-white px-8 py-4 rounded-full text-base font-semibold hover:brightness-110 transition-all shadow-md">
                   Commencer le Suivi <ArrowRight className="w-4 h-4" />
                 </Link>
@@ -356,7 +356,7 @@ const Index = () => {
               Rejoignez des milliers de patients et professionnels de santé utilisant SmartGuardian.
             </p>
             <Link
-              to="/login"
+              to="/register"
               className="inline-flex items-center gap-2 bg-primary text-primary-foreground px-8 py-4 rounded-full text-base font-semibold hover:brightness-110 transition-all glow-sage">
 
               Commencer Gratuitement <ArrowRight className="w-4 h-4" />

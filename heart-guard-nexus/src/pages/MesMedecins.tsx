@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Stethoscope, Phone, BadgeCheck, CheckCircle, Clock, XCircle } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
 type Medecin = {
@@ -36,7 +37,7 @@ const MesMedecins = () => {
         .from("patients")
         .select("id")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       if (data) setPatientId(data.id);
       return data;
     },
@@ -68,9 +69,20 @@ const MesMedecins = () => {
     },
   });
 
-  // Create demande
+  // Create demande (une seule demande par médecin : pas de doublon en_attente / approuvee)
   const { mutate: choisirMedecin, isPending } = useMutation({
     mutationFn: async (medecinId: string) => {
+      if (!patientId) throw new Error("Patient non identifié");
+      const { data: existing } = await supabase
+        .from("demandes")
+        .select("id, statut")
+        .eq("patient_id", patientId)
+        .eq("medecin_id", medecinId)
+        .in("statut", ["en_attente", "approuvee"])
+        .maybeSingle();
+      if (existing) {
+        throw new Error("Vous avez déjà une demande en cours ou acceptée pour ce médecin.");
+      }
       const { error } = await supabase.from("demandes").insert({
         patient_id: patientId,
         medecin_id: medecinId,
@@ -80,6 +92,10 @@ const MesMedecins = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["mes-demandes", patientId] });
+      toast.success("Demande envoyée au médecin.");
+    },
+    onError: (err: Error) => {
+      toast.error(err.message || "Impossible d'envoyer la demande.");
     },
   });
 

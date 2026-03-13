@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Users, Cpu, Activity, Clock, Search, Wifi, WifiOff, Battery, CheckCircle2, XCircle, Plus, X } from "lucide-react";
+import { Users, Cpu, Activity, Clock, Search, Wifi, WifiOff, Battery, CheckCircle2, XCircle, Plus, X, Loader } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
@@ -11,6 +11,17 @@ type Utilisateur = {
   email: string;
   role: "admin" | "medecin" | "patient" | "proche";
   telephone: string | null;
+};
+
+type DemandeAdmin = {
+  id: string;
+  patient_id: string;
+  medecin_id: string;
+  statut: string;
+  created_at: string;
+  patient_nom: string;
+  patient_maladies: string[];
+  medecin_nom: string;
 };
 
 const devices_mock = [
@@ -35,7 +46,7 @@ const systemHealth = [
 ];
 
 const AdminDashboard = () => {
-  const [tab, setTab] = useState<"users" | "devices" | "logs" | "system">("users");
+  const [tab, setTab] = useState<"users" | "devices" | "logs" | "system" | "demandes">("users");
   const [search, setSearch] = useState("");
   const [showCreateMedecin, setShowCreateMedecin] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
@@ -111,6 +122,68 @@ const AdminDashboard = () => {
         .gte("created_at", since)
         .eq("severity", "CRITIQUE");
       return count ?? 0;
+    },
+  });
+
+  // ✅ Demandes avec nom patient + maladies (pour admin)
+  const {
+    data: demandesList,
+    isLoading: demandesLoading,
+  } = useQuery({
+    queryKey: ["admin-demandes"],
+    queryFn: async () => {
+      const { data: demandesRaw, error: demandesError } = await supabase
+        .from("demandes")
+        .select("id, patient_id, medecin_id, statut, created_at")
+        .order("created_at", { ascending: false });
+
+      if (demandesError) throw demandesError;
+      if (!demandesRaw?.length) return [] as DemandeAdmin[];
+
+      const patientIds = [...new Set(demandesRaw.map((d: { patient_id: string }) => d.patient_id))];
+      const medecinIds = [...new Set(demandesRaw.map((d: { medecin_id: string }) => d.medecin_id))];
+      const allUserIds = [...new Set([...patientIds, ...medecinIds])];
+
+      const { data: patientsRows, error: patientsErr } = await supabase
+        .from("patients")
+        .select("id, user_id, maladies")
+        .in("id", patientIds);
+
+      if (patientsErr) throw patientsErr;
+
+      const userIds = (patientsRows || []).map((p: { user_id: string }) => p.user_id);
+      if (medecinIds.length) userIds.push(...medecinIds);
+
+      const { data: utilisateursRows, error: utilErr } = await supabase
+        .from("utilisateurs")
+        .select("id, nom, prenom")
+        .in("id", [...new Set(userIds)]);
+
+      if (utilErr) throw utilErr;
+
+      const merged: DemandeAdmin[] = demandesRaw.map((d: { id: string; patient_id: string; medecin_id: string; statut: string; created_at: string }) => {
+        const patientRow = patientsRows?.find((p: { id: string }) => p.id === d.patient_id);
+        const patientUser = utilisateursRows?.find((u: { id: string }) => u.id === patientRow?.user_id);
+        const medecinUser = utilisateursRows?.find((u: { id: string }) => u.id === d.medecin_id);
+        const patientNom = patientUser
+          ? [patientUser.prenom, patientUser.nom].filter(Boolean).join(" ") || patientUser.nom || "—"
+          : "Patient inconnu";
+        const medecinNom = medecinUser
+          ? [medecinUser.prenom, medecinUser.nom].filter(Boolean).join(" ") || medecinUser.nom || "—"
+          : "—";
+        return {
+          id: d.id,
+          patient_id: d.patient_id,
+          medecin_id: d.medecin_id,
+          statut: d.statut,
+          created_at: d.created_at,
+          patient_nom: patientNom,
+          patient_maladies: patientRow?.maladies ?? [],
+          medecin_nom: medecinNom,
+        };
+      });
+
+      return merged;
     },
   });
 
@@ -243,9 +316,10 @@ const AdminDashboard = () => {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-muted p-1 rounded-xl w-fit">
+        <div className="flex gap-1 bg-muted p-1 rounded-xl w-fit flex-wrap">
           {([
             { key: "users", label: "Utilisateurs" },
+            { key: "demandes", label: "Demandes" },
             { key: "devices", label: "Capteurs" },
             { key: "logs", label: "Journaux" },
             { key: "system", label: "Système" },
@@ -347,6 +421,72 @@ const AdminDashboard = () => {
                     )}
                   </tbody>
                 </table>
+              )}
+            </div>
+          )}
+
+          {tab === "demandes" && (
+            <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
+              <div className="p-4 border-b border-border">
+                <h2 className="text-lg font-semibold text-card-foreground">Demandes patient → médecin</h2>
+                <p className="text-sm text-muted-foreground mt-0.5">Nom du patient et maladies pour chaque demande</p>
+              </div>
+              {demandesLoading ? (
+                <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
+                  <Loader className="w-5 h-5 animate-spin" />
+                  <span className="text-sm">Chargement des demandes...</span>
+                </div>
+              ) : !demandesList?.length ? (
+                <div className="py-12 text-center text-sm text-muted-foreground">Aucune demande.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Patient</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Maladies</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Médecin demandé</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Date</th>
+                        <th className="text-left text-xs font-medium text-muted-foreground px-4 py-3">Statut</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {demandesList.map((d) => (
+                        <tr key={d.id} className="border-b border-border last:border-0 hover:bg-muted/30 transition-colors">
+                          <td className="px-4 py-3 text-sm font-medium text-card-foreground">{d.patient_nom}</td>
+                          <td className="px-4 py-3">
+                            {d.patient_maladies?.length ? (
+                              <div className="flex flex-wrap gap-1">
+                                {d.patient_maladies.map((m, i) => (
+                                  <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{m}</span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">Dr. {d.medecin_nom}</td>
+                          <td className="px-4 py-3 text-sm text-muted-foreground">
+                            {new Date(d.created_at).toLocaleDateString("fr-FR", { dateStyle: "medium" })}
+                          </td>
+                          <td className="px-4 py-3">
+                            <span
+                              className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${
+                                d.statut === "approuvee"
+                                  ? "bg-green-500/10 text-green-600"
+                                  : d.statut === "refusee"
+                                    ? "bg-destructive/10 text-destructive"
+                                    : "bg-amber-500/10 text-amber-600"
+                              }`}
+                            >
+                              {d.statut === "en_attente" ? "En attente" : d.statut === "approuvee" ? "Approuvée" : "Refusée"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
           )}

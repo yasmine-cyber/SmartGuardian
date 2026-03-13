@@ -1,0 +1,172 @@
+================================================================================
+SMARTGUARDIAN / HEART GUARD NEXUS — Documentation des travaux et modifications
+================================================================================
+Date : résumé de l’ensemble des changements effectués sur le projet.
+Stack : Vite, React, TypeScript, Supabase, shadcn/Tailwind.
+Rôles : patient, médecin, proche, admin.
+
+================================================================================
+1. DASHBOARD ADMIN
+================================================================================
+- Ajout d’un onglet « Demandes » dans AdminDashboard.
+- Chargement des demandes avec jointures sur patients et utilisateurs.
+- Affichage dans un tableau : nom du patient, maladies, et informations liées.
+
+================================================================================
+2. DASHBOARD MÉDECIN — Demandes et patients
+================================================================================
+- Une seule demande active par couple (patient, médecin) : vérification côté app
+  avant insert + toast si doublon.
+- Côté base : index unique partiel sur demandes (patient_id, medecin_id) quand
+  statut IN ('en_attente', 'approuvee') + nettoyage des doublons (voir scripts SQL).
+- Onglet « Demandes » : affichage des infos patient (nom, prénom, âge, téléphone,
+  maladies en badges). Données chargées via table patients (date_naissance,
+  maladies) + utilisateurs.
+
+================================================================================
+3. POLITIQUES RLS SUPABASE
+================================================================================
+Fichier : supabase-policies.sql
+
+- Table demandes : SELECT pour le patient (ses demandes) et le médecin (demandes
+  reçues), INSERT pour le patient (création demande), UPDATE pour médecin et
+  patient (accepter/refuser, annuler).
+- Table patients : SELECT pour le patient (sa ligne) et le médecin (patients
+  assignés), UPDATE pour le patient (profil) et pour le médecin (medecin_id
+  lors de l’acceptation d’une demande, sous condition de demande en_attente).
+- Table utilisateurs : SELECT propre profil + médecin peut lire les profils des
+  utilisateurs qui sont ses patients assignés.
+
+Scripts associés (à exécuter si besoin) :
+- supabase-fix-patient-medecin-link.sql : rattraper les patients déjà acceptés
+  sans medecin_id mis à jour.
+- supabase-deduplicate-patients.sql : fusionner les doublons de fiches patient
+  (même user_id + medecin_id).
+
+================================================================================
+4. ARCHIVAGE PATIENT PAR LE MÉDECIN
+================================================================================
+- Logique : archiver = dissocier le patient du médecin (medecin_id = NULL) tout
+  en gardant l’historique ; le patient peut refaire une demande à un autre médecin.
+- Table patient_medecin_archive + politiques RLS (script supabase-archive-patient.sql).
+- Remplacement des PATCH directs sur patients par des RPC (éviter 500 RLS) :
+  - archive_patient(p_patient_id) : insert dans archive + update patients.medecin_id = NULL.
+  - update_patient_notes(p_patient_id, p_notes_medecin) : mise à jour des notes cliniques.
+- Fichier supabase-archive-patient-add-only.sql : uniquement les deux fonctions
+  + GRANT (à exécuter si la table/policies existent déjà).
+- DoctorDashboard : bouton « Archiver ce patient », onglet « Archivés », appels
+  aux RPC au lieu de PATCH.
+
+================================================================================
+5. MISE À JOUR DU COMPTE PATIENT (profil + maladies)
+================================================================================
+Problèmes initiaux : 406 sur GET patients, 500 sur PATCH patients, pas de liste
+de maladies à la mise à jour.
+
+- Requêtes patients : utilisation de .maybeSingle() au lieu de .single() pour
+  éviter 406 quand il n’y a pas de fiche (PatientProfile, MesMedecins,
+  CompleteProfile).
+- Mise à jour fiche patient : plus de PATCH direct ; utilisation de la RPC
+  update_my_patient_profile (SECURITY DEFINER) pour éviter 500.
+- Fichier SQL : supabase-update-my-patient-profile-only.sql
+  - Paramètres : p_date_naissance (date), p_adresse (text), p_maladies (text[]),
+    p_antecedents (text), p_traitements (text[]).
+  - À exécuter dans Supabase SQL Editor (une seule fois ou après modification).
+
+PatientProfile (page profil patient) :
+- Sauvegarde : mise à jour utilisateurs puis, si patient?.id existe, appel RPC
+  update_my_patient_profile. Sinon message de succès invitant à compléter la
+  fiche patient.
+- Bandeau si pas de fiche : « Pour enregistrer vos données médicales… » + lien
+  « Compléter ma fiche » vers /complete-profile.
+- Onglet Médical : liste de maladies prédéfinie (MALADIES_REF) avec cases à
+  cocher (Hypertension, Diabète type 1/2, Insuffisance cardiaque, etc. + Autre
+  avec champ texte). Affichage en lecture seule des maladies en badges.
+- État autreMaladie pour « Autre » ; rechargement du profil après sauvegarde
+  (loadProfile) pour afficher les données réellement enregistrées.
+
+CompleteProfile (complétion de profil / premier enregistrement patient) :
+- Chargement des données patient existantes (date_naissance, maladies) quand
+  l’utilisateur est patient, avec .maybeSingle().
+- Préremplissage du formulaire (maladies, « Autre ») pour la mise à jour.
+- Lors de la mise à jour d’un patient existant : appel à la RPC
+  update_my_patient_profile au lieu du PATCH (en récupérant adresse, antecedents,
+  traitements pour ne pas les écraser).
+
+================================================================================
+6. MES MÉDECINS (PATIENT)
+================================================================================
+- Remplacement de l’icône ArrowRight par ChevronRight (import lucide-react) pour
+  éviter « ArrowRight is not defined ».
+- Requête de la fiche patient : .maybeSingle() au lieu de .single() pour éviter
+  406 si pas encore de fiche.
+- Si pas de fiche patient : bandeau « Profil patient incomplet » + lien
+  /complete-profile, bouton « Choisir ce médecin » désactivé avec tooltip.
+
+================================================================================
+7. STATUS BADGE (COMPOSANT)
+================================================================================
+Problème : « Cannot read properties of undefined (reading 'bg') » lorsque le
+statut venant de la BDD n’était pas dans la config (offline, stable, sévérité
+alertes, etc.).
+
+- status accepte désormais une string optionnelle (plus seulement
+  normal | elevated | critical).
+- Config étendue : normal, stable, elevated, attention, surveillance, critical,
+  critique, offline, moyen, faible (avec libellés et classes cohérentes).
+- defaultConfig pour tout statut inconnu (style neutre, libellé « — »).
+- Normalisation : trim + toLowerCase() avant la recherche dans la config.
+- sizes : accès sécurisé avec fallback (ex. md) si size inconnu.
+
+================================================================================
+8. DIVERS (LAYOUT, 404, CTA)
+================================================================================
+- DashboardLayout : déconnexion via supabase.auth.signOut() puis
+  navigate("/").
+- Page NotFound : texte en français, style cohérent avec l’app.
+- Index (landing) : CTA « S’inscrire » / « Commencer » pointent vers /register.
+
+================================================================================
+9. DEMANDES — ERREUR 403 (RLS) À LA CRÉATION D’UNE DEMANDE
+================================================================================
+Problème : « new row violates row-level security policy for table demandes »
+lorsqu’un patient envoie une demande à un médecin.
+
+- Fichier supabase-fix-demandes-insert.sql :
+  - Suppression et recréation de la politique demandes_insert_patient.
+  - WITH CHECK : patient_id IN (SELECT id FROM patients WHERE user_id = auth.uid())
+    ET medecin_id IS NOT NULL.
+- À exécuter dans Supabase SQL Editor. Si l’erreur persiste, une variante
+  utilisant une fonction get_my_patient_id() est fournie en commentaire dans
+  le même fichier.
+- Prérequis : l’utilisateur doit avoir une fiche dans la table patients
+  (profil complété) pour que la politique soit satisfaite.
+
+================================================================================
+10. FICHIERS SQL À EXÉCUTER DANS SUPABASE (RÉCAP)
+================================================================================
+- supabase-policies.sql : politiques RLS de base (patients, demandes,
+  utilisateurs). À exécuter en premier si pas déjà fait.
+- supabase-archive-patient.sql : table patient_medecin_archive + politiques.
+- supabase-archive-patient-add-only.sql : fonctions archive_patient et
+  update_patient_notes + GRANT.
+- supabase-update-my-patient-profile-only.sql : fonction
+  update_my_patient_profile (maladies/traitements en text[]) + GRANT.
+- supabase-fix-demandes-insert.sql : correction politique INSERT sur demandes.
+- Optionnel : supabase-fix-patient-medecin-link.sql, supabase-deduplicate-patients.sql.
+
+================================================================================
+11. FICHIERS SOURCE PRINCIPAUX MODIFIÉS
+================================================================================
+- src/pages/AdminDashboard.tsx      (onglet Demandes, jointures)
+- src/pages/DoctorDashboard.tsx     (archivage, RPC notes, onglet Archivés)
+- src/pages/PatientProfile.tsx      (RPC, liste maladies, bandeau complete-profile)
+- src/pages/CompleteProfile.tsx     (chargement patient, RPC update)
+- src/pages/MesMedecins.tsx         (ChevronRight, maybeSingle, bandeau)
+- src/components/StatusBadge.tsx    (config étendue, defaultConfig, status string)
+- src/components/DashboardLayout.tsx (déconnexion)
+- src/pages/NotFound.tsx, Index.tsx  (texte FR, CTA register)
+
+================================================================================
+FIN DU DOCUMENT
+================================================================================

@@ -1,5 +1,5 @@
 import { useEffect, useState, ReactNode } from "react";
-import { Link, useLocation } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Activity, Bell, History, AlertTriangle, User, Settings, Users,
@@ -77,7 +77,14 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [userName, setUserName] = useState<string | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const location = useLocation();
+  const navigate = useNavigate();
   const items = navItems[role];
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    setMobileOpen(false);
+    navigate("/");
+  };
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -149,13 +156,14 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
             </div>
           )}
         </div>
-        <Link
-          to="/"
-          className={`flex items-center gap-2 mt-3 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ${collapsed ? "justify-center" : ""}`}
+        <button
+          type="button"
+          onClick={handleSignOut}
+          className={`w-full flex items-center gap-2 mt-3 px-3 py-2 rounded-xl text-sm text-muted-foreground hover:text-foreground hover:bg-muted transition-colors ${collapsed ? "justify-center" : ""}`}
         >
           <LogOut className="w-4 h-4" />
           {!collapsed && <span>Déconnexion</span>}
-        </Link>
+        </button>
       </div>
     </div>
   );

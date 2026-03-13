@@ -4,6 +4,7 @@ import { Search, Users, AlertTriangle, Activity, TrendingUp, Bell, CheckCircle, 
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
 import LiveECGChart from "@/components/LiveECGChart";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 
 type Tab = "patients" | "alertes" | "demandes";
@@ -40,6 +41,8 @@ interface Demande {
   created_at: string;
   patients: {
     id: string;
+    date_naissance: string | null;
+    maladies: string[];
     utilisateurs: {
       nom: string;
       prenom: string;
@@ -71,6 +74,41 @@ const DoctorDashboard = () => {
   const [notes, setNotes] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesSaved, setNotesSaved] = useState(false);
+
+  const refetchPatients = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: patientsData } = await supabase
+      .from("patients")
+      .select(`
+        id,
+        user_id,
+        maladies,
+        date_naissance,
+        adresse,
+        antecedents,
+        notes_medecin,
+        status,
+        utilisateurs!patients_user_id_fkey (nom, prenom, telephone)
+      `)
+      .eq("medecin_id", user.id);
+    if (patientsData) {
+      const mapped = patientsData.map((p: any) => ({
+        id: p.id,
+        user_id: p.user_id,
+        nom: p.utilisateurs?.nom || "",
+        prenom: p.utilisateurs?.prenom || "",
+        telephone: p.utilisateurs?.telephone || "",
+        maladies: p.maladies || [],
+        date_naissance: p.date_naissance || "",
+        adresse: p.adresse || "",
+        antecedents: p.antecedents || "",
+        notes_medecin: p.notes_medecin || "",
+        status: p.status || "offline",
+      }));
+      setPatients(mapped);
+    }
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -156,10 +194,10 @@ const DoctorDashboard = () => {
       if (demandesRaw && demandesRaw.length > 0) {
         const patientIds = demandesRaw.map((d: any) => d.patient_id);
 
-        // ✅ Step 2: fetch patient info separately
+        // Step 2: fetch patient info (nom, prenom, âge, maladies)
         const { data: patientsInfo } = await supabase
           .from("patients")
-          .select("id, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
+          .select("id, date_naissance, maladies, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
           .in("id", patientIds);
 
         // ✅ Step 3: merge
@@ -212,17 +250,33 @@ const DoctorDashboard = () => {
   };
 
   const handleDemande = async (demandeId: string, patientRowId: string, action: "approuvee" | "refusee") => {
-    await supabase
+    const { error: errDemande } = await supabase
       .from("demandes")
       .update({ statut: action, updated_at: new Date().toISOString() })
       .eq("id", demandeId);
 
+    if (errDemande) {
+      toast.error("Impossible de mettre à jour la demande.");
+      return;
+    }
+
     if (action === "approuvee") {
       const { data: { user } } = await supabase.auth.getUser();
-      await supabase
+      const { error: errPatient } = await supabase
         .from("patients")
         .update({ medecin_id: user?.id, updated_at: new Date().toISOString() })
         .eq("id", patientRowId);
+
+      if (errPatient) {
+        toast.error(
+          "Demande marquée acceptée mais le lien médecin n'a pas été enregistré. Vérifiez les politiques RLS sur la table patients (voir supabase-policies.sql)."
+        );
+      } else {
+        toast.success("Patient ajouté à votre liste.");
+        await refetchPatients();
+      }
+    } else {
+      toast.success("Demande refusée.");
     }
 
     setDemandes((prev) => prev.filter((d) => d.id !== demandeId));
@@ -532,18 +586,34 @@ const DoctorDashboard = () => {
               ) : (
                 demandes.map((d) => {
                   const u = d.patients?.utilisateurs;
-                  const fullName = [u?.prenom, u?.nom].filter(Boolean).join(" ") || "—";
+                  const fullName = [u?.prenom, u?.nom].filter(Boolean).join(" ").trim() || "—";
+                  const age = d.patients?.date_naissance
+                    ? Math.floor((Date.now() - new Date(d.patients.date_naissance).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
+                    : null;
+                  const maladies = d.patients?.maladies ?? [];
                   return (
                     <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                      className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4">
+                      className="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-start gap-4">
                       <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0 text-sm">
-                        {fullName.charAt(0)}
+                        {fullName !== "—" ? fullName.charAt(0) : "?"}
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{fullName}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">
-                          {u?.telephone || "Pas de téléphone"} • {new Date(d.created_at).toLocaleDateString("fr-FR")}
-                        </p>
+                      <div className="flex-1 min-w-0 space-y-1.5">
+                        <p className="text-sm font-semibold text-foreground">{fullName}</p>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+                          {age != null && <span>🎂 {age} ans</span>}
+                          <span>📞 {u?.telephone || "Pas de téléphone"}</span>
+                          <span>🗓 {new Date(d.created_at).toLocaleDateString("fr-FR")}</span>
+                        </div>
+                        {maladies.length > 0 && (
+                          <div className="flex flex-wrap gap-1 pt-0.5">
+                            <span className="text-xs text-muted-foreground w-full">Maladies :</span>
+                            {maladies.map((m, i) => (
+                              <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">
+                                {m}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div className="flex gap-2 flex-shrink-0">
                         <button

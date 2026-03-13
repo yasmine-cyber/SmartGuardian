@@ -104,16 +104,22 @@ const CompleteProfile = () => {
       if (role === "patient") {
         const { data: existingPatient } = await supabase
           .from("patients")
-          .select("id")
+          .select("id, adresse, antecedents, traitements")
           .eq("user_id", user.id)
-          .single();
+          .maybeSingle();
 
         if (existingPatient) {
-          await supabase.from("patients").update({
-            date_naissance: dateNaissance,
-            maladies: maladiesToSave,
-            updated_at: new Date().toISOString(),
-          }).eq("user_id", user.id);
+          const { data: rpcData, error: e2 } = await supabase.rpc("update_my_patient_profile", {
+            p_date_naissance: dateNaissance,
+            p_adresse: existingPatient.adresse ?? "",
+            p_maladies: maladiesToSave,
+            p_antecedents: existingPatient.antecedents ?? "",
+            p_traitements: existingPatient.traitements ?? [],
+          });
+          if (e2) throw e2;
+          if (rpcData && typeof rpcData === "object" && (rpcData as { ok?: boolean }).ok === false) {
+            throw new Error((rpcData as { error?: string }).error || "Erreur mise à jour fiche patient");
+          }
         } else {
           await supabase.from("patients").insert({
             user_id: user.id,

@@ -5,6 +5,7 @@ import {
   Camera, Loader, CheckCircle, AlertCircle,
   Edit3, X, Save, Heart, Pill, FileText, Activity
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import DashboardLayout from "@/components/DashboardLayout";
 
@@ -38,6 +39,24 @@ const STATUS_COLORS: Record<string, string> = {
   critical: "bg-red-500/10 text-red-500 border-red-500/20",
 };
 
+const MALADIES_REF = [
+  "Hypertension artérielle",
+  "Insuffisance cardiaque",
+  "Arythmie cardiaque",
+  "Fibrillation auriculaire",
+  "Angine de poitrine",
+  "Diabète de type 1",
+  "Diabète de type 2",
+  "Obésité",
+  "Insuffisance respiratoire",
+  "Apnée du sommeil",
+  "Épilepsie",
+  "Maladie de Parkinson",
+  "Alzheimer",
+  "Insuffisance rénale",
+  "Autre",
+];
+
 const TABS = [
   { id: "info", label: "Informations", icon: User },
   { id: "medical", label: "Médical", icon: Heart },
@@ -61,6 +80,7 @@ const PatientProfile = () => {
   // Tag input state
   const [maladieInput, setMaladieInput] = useState("");
   const [traitementInput, setTraitementInput] = useState("");
+  const [autreMaladie, setAutreMaladie] = useState("");
 
   useEffect(() => {
     loadProfile();
@@ -74,7 +94,7 @@ const PatientProfile = () => {
 
       const [{ data: uData }, { data: pData }] = await Promise.all([
         supabase.from("utilisateurs").select("*").eq("id", user.id).single(),
-        supabase.from("patients").select("*").eq("user_id", user.id).single(),
+        supabase.from("patients").select("*").eq("user_id", user.id).maybeSingle(),
       ]);
 
       const util = { ...uData, email: user.email };
@@ -84,6 +104,12 @@ const PatientProfile = () => {
       if (pData) {
         setPatient(pData);
         setFormPatient(pData);
+        const autre = (pData.maladies || []).find((m: string) => String(m).startsWith("Autre: "));
+        setAutreMaladie(autre ? String(autre).replace(/^Autre:\s*/i, "").trim() : "");
+      } else {
+        setPatient({});
+        setFormPatient({});
+        setAutreMaladie("");
       }
     } catch (err) {
       setError("Impossible de charger le profil.");
@@ -101,7 +127,7 @@ const PatientProfile = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
-      // Update utilisateurs
+      // Toujours mettre à jour utilisateurs
       const { error: e1 } = await supabase
         .from("utilisateurs")
         .update({
@@ -115,28 +141,35 @@ const PatientProfile = () => {
 
       if (e1) throw e1;
 
-      // Update patients
-      const { error: e2 } = await supabase
-        .from("patients")
-        .update({
-          date_naissance: formPatient.date_naissance || null,
-          adresse: formPatient.adresse,
-          maladies: formPatient.maladies || [],
-          antecedents: formPatient.antecedents,
-          traitements: formPatient.traitements || [],
-          updated_at: new Date().toISOString(),
-        })
-        .eq("user_id", user.id);
-
-      if (e2) throw e2;
-
       setUtilisateur({ ...utilisateur, ...formUtil });
-      setPatient({ ...patient, ...formPatient });
+
+      // Mise à jour fiche patient uniquement si elle existe (sinon inviter à compléter le profil)
+      if (patient?.id) {
+        const maladiesToSave = (formPatient.maladies || []).map((m) =>
+          m === "Autre" && autreMaladie?.trim() ? `Autre: ${autreMaladie.trim()}` : m
+        );
+        const { data: rpcData, error: e2 } = await supabase.rpc("update_my_patient_profile", {
+          p_date_naissance: formPatient.date_naissance || null,
+          p_adresse: formPatient.adresse ?? "",
+          p_maladies: maladiesToSave,
+          p_antecedents: formPatient.antecedents ?? "",
+          p_traitements: formPatient.traitements ?? [],
+        });
+        if (e2) throw e2;
+        if (rpcData && typeof rpcData === "object" && (rpcData as { ok?: boolean }).ok === false) {
+          throw new Error((rpcData as { error?: string }).error || "Fiche patient introuvable.");
+        }
+        setPatient({ ...patient, ...formPatient });
+        setSuccess("Profil mis à jour avec succès !");
+        loadProfile();
+      } else {
+        setSuccess("Profil utilisateur enregistré. Pour enregistrer vos données médicales (maladies, date de naissance), complétez votre fiche patient.");
+      }
       setEditing(false);
-      setSuccess("Profil mis à jour avec succès !");
-      setTimeout(() => setSuccess(""), 3000);
-    } catch (err) {
-      setError("Erreur lors de la mise à jour.");
+      setTimeout(() => setSuccess(""), 4000);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Erreur lors de la mise à jour.";
+      setError(msg);
     } finally {
       setSaving(false);
     }
@@ -145,6 +178,8 @@ const PatientProfile = () => {
   const handleCancel = () => {
     setFormUtil(utilisateur);
     setFormPatient(patient);
+    const autre = (patient.maladies || []).find((m: string) => String(m).startsWith("Autre: "));
+    setAutreMaladie(autre ? String(autre).replace(/^Autre:\s*/i, "").trim() : "");
     setEditing(false);
     setError("");
   };
@@ -226,6 +261,26 @@ const PatientProfile = () => {
     setFormPatient((p) => ({ ...p, [field]: current }));
   };
 
+  const toggleMaladie = (nom: string) => {
+    const current = formPatient.maladies || [];
+    const has = current.includes(nom) || (nom === "Autre" && current.some((m) => String(m).startsWith("Autre:")));
+    if (has) {
+      setFormPatient((p) => ({
+        ...p,
+        maladies: (p.maladies || []).filter((m) => m !== nom && !String(m).startsWith("Autre:")),
+      }));
+      if (nom === "Autre") setAutreMaladie("");
+    } else {
+      setFormPatient((p) => ({ ...p, maladies: [...(p.maladies || []), nom] }));
+    }
+  };
+
+  const isMaladieChecked = (nom: string) => {
+    const m = formPatient.maladies || [];
+    if (nom === "Autre") return m.some((x) => x === "Autre" || String(x).startsWith("Autre:"));
+    return m.includes(nom);
+  };
+
   const initials = `${formUtil.prenom?.[0] || ""}${formUtil.nom?.[0] || ""}`.toUpperCase() || "?";
 
   if (loading) {
@@ -257,6 +312,16 @@ const PatientProfile = () => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {!patient?.id && (
+          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }}
+            className="flex items-center justify-between gap-3 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl text-sm">
+            <span className="text-amber-700 dark:text-amber-400">Pour enregistrer vos données médicales (maladies, date de naissance), complétez d&apos;abord votre fiche patient.</span>
+            <Link to="/complete-profile" className="shrink-0 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:opacity-90">
+              Compléter ma fiche
+            </Link>
+          </motion.div>
+        )}
 
         {/* Hero card */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}
@@ -412,41 +477,73 @@ const PatientProfile = () => {
                 <motion.div key="medical" initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }}
                   className="space-y-5">
 
-                  {/* Maladies */}
+                  {/* Maladies — liste comme à la création de compte */}
                   <div>
                     <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-2">
                       <Heart className="w-4 h-4" /> Maladies chroniques
                     </label>
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {(formPatient.maladies || []).map((m, i) => (
-                        <span key={i} className="flex items-center gap-1.5 text-xs bg-primary/10 text-primary px-3 py-1 rounded-full">
-                          {m}
-                          {editing && (
-                            <button onClick={() => removeTag("maladies", i)} className="hover:text-destructive transition-colors">
+                    {editing ? (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                          {MALADIES_REF.map((nom) => (
+                            <label key={nom} className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={isMaladieChecked(nom)}
+                                onChange={() => toggleMaladie(nom)}
+                                className="rounded border-border text-primary focus:ring-primary/20"
+                              />
+                              <span className="text-sm text-foreground">{nom}</span>
+                            </label>
+                          ))}
+                        </div>
+                        {isMaladieChecked("Autre") && (
+                          <div className="mb-3">
+                            <input
+                              type="text"
+                              value={autreMaladie}
+                              onChange={(e) => setAutreMaladie(e.target.value)}
+                              placeholder="Précisez la maladie (Autre)"
+                              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
+                            />
+                          </div>
+                        )}
+                        <div className="flex gap-2 flex-wrap items-center mt-2">
+                          <input
+                            value={maladieInput}
+                            onChange={(e) => setMaladieInput(e.target.value)}
+                            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag("maladies", maladieInput))}
+                            placeholder="Autre maladie (libre) — Entrée pour ajouter"
+                            className="flex-1 min-w-[180px] bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => addTag("maladies", maladieInput)}
+                            className="px-3 py-2 bg-primary/10 text-primary rounded-xl text-sm hover:bg-primary/20"
+                          >
+                            + Ajouter
+                          </button>
+                        </div>
+                        {(formPatient.maladies || []).filter((m) => !MALADIES_REF.includes(m) && !String(m).startsWith("Autre:")).map((m, i) => (
+                          <span key={i} className="inline-flex items-center gap-1.5 text-xs bg-muted text-foreground px-2 py-1 rounded-full mr-2 mt-2">
+                            {m}
+                            <button type="button" onClick={() => removeTag("maladies", formPatient.maladies!.indexOf(m))} className="hover:text-destructive">
                               <X className="w-3 h-3" />
                             </button>
-                          )}
-                        </span>
-                      ))}
-                      {(formPatient.maladies || []).length === 0 && !editing && (
-                        <span className="text-sm text-muted-foreground">Aucune maladie renseignée</span>
-                      )}
-                    </div>
-                    {editing && (
-                      <div className="flex gap-2">
-                        <input
-                          value={maladieInput}
-                          onChange={(e) => setMaladieInput(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addTag("maladies", maladieInput))}
-                          placeholder="Ex: Diabète type 2 — Entrée pour ajouter"
-                          className="flex-1 bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all"
-                        />
-                        <button
-                          onClick={() => addTag("maladies", maladieInput)}
-                          className="px-3 py-2 bg-primary/10 text-primary rounded-xl text-sm hover:bg-primary/20 transition-all"
-                        >
-                          + Ajouter
-                        </button>
+                          </span>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {(formPatient.maladies || []).length === 0 ? (
+                          <span className="text-sm text-muted-foreground">Aucune maladie renseignée</span>
+                        ) : (
+                          (formPatient.maladies || []).map((m, i) => (
+                            <span key={i} className="text-xs bg-primary/10 text-primary px-3 py-1 rounded-full">
+                              {m}
+                            </span>
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
