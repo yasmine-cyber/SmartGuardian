@@ -25,19 +25,14 @@ import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
 import MesMedecins from "@/pages/MesMedecins";
-<<<<<<< Updated upstream
-import PatientMessages from "@/pages/PatientMessages";
-=======
-import PatientVitals   from "@/pages/PatientVitals";
-import PatientAlerts   from "@/pages/PatientAlerts";
-import PatientHistory  from "@/pages/PatientHistory";
-import PatientMedecins from "@/pages/PatientMedecins";
+// ── Patient sub-pages (both branches merged) ──
+import PatientMessages  from "@/pages/PatientMessages";
+import PatientVitals    from "@/pages/PatientVitals";
+import PatientAlerts    from "@/pages/PatientAlerts";
+import PatientHistory   from "@/pages/PatientHistory";
+import PatientMedecins  from "@/pages/PatientMedecins";
 import PatientEmergency from "@/pages/PatientEmergency";
 import PatientSettings  from "@/pages/PatientSettings";
-
->>>>>>> Stashed changes
-
-
 
 const queryClient = new QueryClient();
 
@@ -54,36 +49,38 @@ const App = () => (
           <Route path="/register" element={<Register />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/reset-password" element={<ResetPassword />} />
-          {/* pour medecin - invite only, protected via initialHash check in SetPassword.tsx */}
-          <Route path="/set-password" element={<SetPassword />} /> 
+          <Route path="/set-password" element={<SetPassword />} />
           <Route path="/unauthorized" element={<Unauthorized />} />
+          <Route path="/auth/callback" element={<AuthCallback />} />
+          <Route path="/complete-profile" element={<CompleteProfile />} />
 
-          {/* Protected routes */}
+          {/* Patient routes */}
           <Route path="/patient" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
-          <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
-          <Route path="/patient/medecins" element={<ProtectedRoute allowedRoles={["patient"]}><MesMedecins /></ProtectedRoute>} />
-          <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
-          <Route path="/patient/*" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
-          <Route path="/doctor" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
-          <Route path="/doctor/patients" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
-          <Route path="/doctor/alerts" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
-          <Route path="/doctor/analytics" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAnalytics /></ProtectedRoute>} />
-          <Route path="/doctor/messages" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
-          <Route path="/doctor/settings" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
-          <Route path="/doctor/*" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/patient/profile"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
+          <Route path="/patient/medecins"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMedecins /></ProtectedRoute>} />
+          <Route path="/patient/messages"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
+          <Route path="/patient/vitals"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientVitals /></ProtectedRoute>} />
+          <Route path="/patient/alerts"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientAlerts /></ProtectedRoute>} />
+          <Route path="/patient/history"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientHistory /></ProtectedRoute>} />
+          <Route path="/patient/emergency" element={<ProtectedRoute allowedRoles={["patient"]}><PatientEmergency /></ProtectedRoute>} />
+          <Route path="/patient/settings"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientSettings /></ProtectedRoute>} />
+          <Route path="/patient/*"         element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
+
+          {/* Doctor routes */}
+          <Route path="/doctor"            element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/doctor/patients"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
+          <Route path="/doctor/alerts"     element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
+          <Route path="/doctor/analytics"  element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAnalytics /></ProtectedRoute>} />
+          <Route path="/doctor/messages"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
+          <Route path="/doctor/settings"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
+          <Route path="/doctor/*"          element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+
+          {/* Family & Admin routes */}
           <Route path="/family/*" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
-          <Route path="/admin/*" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/*"  element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
-          <Route path="/auth/callback" element={<AuthCallback />} />
-          <Route path="/complete-profile" element={<CompleteProfile />} />
-          <Route path="/patient/vitals"   element={<PatientVitals />} />
-          <Route path="/patient/alerts"   element={<PatientAlerts />} />
-          <Route path="/patient/history"  element={<PatientHistory />} />
-          <Route path="/patient/medecins" element={<PatientMedecins />} />
-          <Route path="/patient/emergency" element={<PatientEmergency />} />
-          <Route path="/patient/settings"  element={<PatientSettings />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
