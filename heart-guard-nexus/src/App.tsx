@@ -25,7 +25,17 @@ import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
 import MesMedecins from "@/pages/MesMedecins";
+<<<<<<< Updated upstream
 import PatientMessages from "@/pages/PatientMessages";
+=======
+import PatientVitals   from "@/pages/PatientVitals";
+import PatientAlerts   from "@/pages/PatientAlerts";
+import PatientHistory  from "@/pages/PatientHistory";
+import PatientMedecins from "@/pages/PatientMedecins";
+import PatientEmergency from "@/pages/PatientEmergency";
+import PatientSettings  from "@/pages/PatientSettings";
+
+>>>>>>> Stashed changes
 
 
 
@@ -68,6 +78,12 @@ const App = () => (
           <Route path="*" element={<NotFound />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/complete-profile" element={<CompleteProfile />} />
+          <Route path="/patient/vitals"   element={<PatientVitals />} />
+          <Route path="/patient/alerts"   element={<PatientAlerts />} />
+          <Route path="/patient/history"  element={<PatientHistory />} />
+          <Route path="/patient/medecins" element={<PatientMedecins />} />
+          <Route path="/patient/emergency" element={<PatientEmergency />} />
+          <Route path="/patient/settings"  element={<PatientSettings />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
