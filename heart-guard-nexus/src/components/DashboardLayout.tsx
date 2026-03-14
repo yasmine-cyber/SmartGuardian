@@ -21,6 +21,7 @@ const navItems: Record<Role, NavItem[]> = {
     { icon: Home, label: "Accueil", path: "/patient" },
     { icon: Activity, label: "Mes Constantes", path: "/patient/vitals" },
     { icon: Users, label: "Mes Médecins", path: "/patient/medecins" },
+    { icon: MessageSquare, label: "Messagerie", path: "/patient/messages" },
     { icon: Bell, label: "Alertes", path: "/patient/alerts" },
     { icon: History, label: "Historique", path: "/patient/history" },
     { icon: AlertTriangle, label: "Urgence", path: "/patient/emergency" },

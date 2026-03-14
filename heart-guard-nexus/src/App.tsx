@@ -8,6 +8,11 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import PatientDashboard from "./pages/PatientDashboard";
 import DoctorDashboard from "./pages/DoctorDashboard";
+import DoctorPatients from "./pages/DoctorPatients";
+import DoctorAlerts from "./pages/DoctorAlerts";
+import DoctorAnalytics from "./pages/DoctorAnalytics";
+import DoctorMessages from "./pages/DoctorMessages";
+import DoctorSettings from "./pages/DoctorSettings";
 import FamilyDashboard from "./pages/FamilyDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
@@ -20,6 +25,7 @@ import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
 import MesMedecins from "@/pages/MesMedecins";
+import PatientMessages from "@/pages/PatientMessages";
 
 
 
@@ -46,7 +52,14 @@ const App = () => (
           <Route path="/patient" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
           <Route path="/patient/profile" element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
           <Route path="/patient/medecins" element={<ProtectedRoute allowedRoles={["patient"]}><MesMedecins /></ProtectedRoute>} />
+          <Route path="/patient/messages" element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
           <Route path="/patient/*" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
+          <Route path="/doctor" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/doctor/patients" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
+          <Route path="/doctor/alerts" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
+          <Route path="/doctor/analytics" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAnalytics /></ProtectedRoute>} />
+          <Route path="/doctor/messages" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
+          <Route path="/doctor/settings" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
           <Route path="/doctor/*" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
           <Route path="/family/*" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
           <Route path="/admin/*" element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
