@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Activity, Bell, History, AlertTriangle, User, Settings, Users,
-  BarChart3, MessageSquare, Shield, Cpu, FileText, Heart, MapPin,
+  BarChart3, MessageSquare, Shield, Cpu, FileText, Heart,
   ChevronLeft, ChevronRight, LogOut, Menu, Wifi
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -39,8 +39,7 @@ const navItems: Record<Role, NavItem[]> = {
   family: [
     { icon: Heart, label: "Mes Proches", path: "/family" },
     { icon: Bell, label: "Alertes", path: "/family/alerts" },
-    { icon: MapPin, label: "Urgence", path: "/family/emergency" },
-    { icon: Settings, label: "Paramètres", path: "/family/settings" },
+    { icon: Settings, label: "Paramètres", path: "/family/parametres" },
   ],
   admin: [
     { icon: Home, label: "Vue système", path: "/admin" },
@@ -61,9 +60,9 @@ const roleLabels: Record<Role, string> = {
 };
 
 const roleNames: Record<Role, string> = {
-  patient: "Karim Messaoudi",
-  doctor: "Dr. Isabelle Moreau",
-  family: "Fatima Chérif",
+  patient: "Patient",
+  doctor: "Médecin",
+  family: "Aidant",
   admin: "Admin Système",
 };
 

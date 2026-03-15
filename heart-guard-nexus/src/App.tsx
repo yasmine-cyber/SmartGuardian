@@ -14,6 +14,8 @@ import DoctorAnalytics from "./pages/DoctorAnalytics";
 import DoctorMessages from "./pages/DoctorMessages";
 import DoctorSettings from "./pages/DoctorSettings";
 import FamilyDashboard from "./pages/FamilyDashboard";
+import FamilyAlerts from "./pages/FamilyAlerts";
+import FamilyParametres from "./pages/FamilyParametres";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
 import ForgotPassword from "@/pages/ForgotPassword";
@@ -74,8 +76,13 @@ const App = () => (
           <Route path="/doctor/settings"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
           <Route path="/doctor/*"          element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
 
-          {/* Family & Admin routes */}
+          {/* Family routes */}
+          <Route path="/family" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+          <Route path="/family/alerts" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyAlerts /></ProtectedRoute>} />
+          <Route path="/family/parametres" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyParametres /></ProtectedRoute>} />
           <Route path="/family/*" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+
+          {/* Admin routes */}
           <Route path="/admin/*"  element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
 
           {/* 404 */}
