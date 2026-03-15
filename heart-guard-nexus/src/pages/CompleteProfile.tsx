@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Heart, User, Phone, Calendar, ArrowRight, AlertCircle, Loader, Check } from "lucide-react";
+import { Heart, User, Phone, Calendar, ArrowRight, AlertCircle, Loader } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const maladiesRef = [
@@ -43,6 +43,9 @@ const CompleteProfile = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { navigate("/login"); return; }
 
+      // ✅ FIX: récupérer le rôle depuis les metadata auth en priorité
+      const metaRole = user.user_metadata?.role;
+
       const { data } = await supabase
         .from("utilisateurs")
         .select("nom, prenom, role, telephone")
@@ -52,9 +55,14 @@ const CompleteProfile = () => {
       if (data) {
         setNom(data.nom || "");
         setPrenom(data.prenom || "");
-        setRole(data.role || "patient");
+        // ✅ FIX: priorité base de données → metadata → "patient"
+        setRole(data.role || metaRole || "patient");
         setTelephone(data.telephone || "");
+      } else if (metaRole) {
+        // ✅ Si pas encore dans la base, utiliser les metadata
+        setRole(metaRole);
       }
+
       setInitialLoading(false);
     };
     load();
@@ -64,13 +72,14 @@ const CompleteProfile = () => {
     e.preventDefault();
     setError("");
 
-    // Validation
     if (!prenom.trim()) { setError("Le prénom est obligatoire."); return; }
     if (!nom.trim()) { setError("Le nom est obligatoire."); return; }
     const phoneDigits = telephone.replace(/\D/g, "");
     if (!telephone.trim() || phoneDigits.length !== 8) {
       setError("Le numéro doit contenir exactement 8 chiffres."); return;
     }
+
+    // ✅ FIX: validations spécifiques au rôle patient uniquement
     if (role === "patient") {
       if (!dateNaissance) { setError("La date de naissance est obligatoire."); return; }
       if (maladies.length === 0) {
@@ -91,7 +100,6 @@ const CompleteProfile = () => {
         m === "Autre" && autreMaladie.trim() ? `Autre: ${autreMaladie.trim()}` : m
       );
 
-      // Update utilisateurs
       const { error: e1 } = await supabase
         .from("utilisateurs")
         .update({
@@ -104,7 +112,7 @@ const CompleteProfile = () => {
 
       if (e1) throw e1;
 
-      // If patient, upsert into patients table
+      // ✅ FIX: upsert patients seulement pour role patient
       if (role === "patient") {
         const { data: existingPatient } = await supabase
           .from("patients")
@@ -133,7 +141,7 @@ const CompleteProfile = () => {
         }
       }
 
-      // If proche and they entered an invite code, consume it to link to the patient
+      // ✅ FIX: code invitation seulement pour proche
       if (role === "proche" && inviteCode.trim()) {
         const { data: rpcResult, error: rpcErr } = await supabase.rpc("consume_invite_code", {
           p_code: inviteCode.trim(),
@@ -152,7 +160,6 @@ const CompleteProfile = () => {
         setInviteCodeError("");
       }
 
-      // Redirect to dashboard
       const dashboardMap: Record<string, string> = {
         patient: "/patient",
         medecin: "/doctor",
@@ -180,12 +187,13 @@ const CompleteProfile = () => {
     <div className="min-h-screen flex items-center justify-center p-6 bg-background">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
 
-        {/* Logo */}
         <div className="text-center mb-8">
           <Heart className="w-10 h-10 text-primary mx-auto mb-3 animate-heartbeat" />
           <h1 className="text-2xl font-bold text-foreground">Compléter votre profil</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Quelques informations supplémentaires pour personnaliser votre expérience
+            {role === "proche"
+              ? "Quelques informations pour configurer votre compte aidant"
+              : "Quelques informations supplémentaires pour personnaliser votre expérience"}
           </p>
         </div>
 
@@ -228,7 +236,7 @@ const CompleteProfile = () => {
               className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
           </div>
 
-          {/* Date de naissance — patient only */}
+          {/* ✅ FIX: Date de naissance — patient uniquement */}
           {role === "patient" && (
             <div>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
@@ -241,21 +249,24 @@ const CompleteProfile = () => {
             </div>
           )}
 
-          {/* Code d'invitation — proche only */}
+          {/* ✅ FIX: Code invitation — proche uniquement */}
           {role === "proche" && (
             <div>
               <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
                 Code d&apos;invitation
               </label>
-              <input type="text" value={inviteCode} onChange={(e) => { setInviteCode(e.target.value); setInviteCodeError(""); }}
+              <input type="text" value={inviteCode}
+                onChange={(e) => { setInviteCode(e.target.value); setInviteCodeError(""); }}
                 placeholder="Code fourni par la personne que vous accompagnez"
                 className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
               {inviteCodeError && <p className="text-xs text-destructive mt-1">{inviteCodeError}</p>}
-              <p className="text-xs text-muted-foreground mt-1">Demandez un code à la personne que vous souhaitez accompagner (depuis son espace Paramètres → Proches).</p>
+              <p className="text-xs text-muted-foreground mt-1">
+                Optionnel — vous pouvez l'ajouter plus tard depuis vos paramètres.
+              </p>
             </div>
           )}
 
-          {/* Maladies — patient only */}
+          {/* ✅ FIX: Maladies — patient uniquement */}
           {role === "patient" && (
             <div>
               <label className="text-xs text-muted-foreground mb-2 block">Maladies suivies</label>
@@ -277,6 +288,15 @@ const CompleteProfile = () => {
                   placeholder="Précisez la maladie"
                   className="mt-2 w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
               )}
+            </div>
+          )}
+
+          {/* ✅ Message informatif pour le proche */}
+          {role === "proche" && (
+            <div className="p-3 bg-primary/5 border border-primary/20 rounded-xl">
+              <p className="text-xs text-muted-foreground">
+                👨‍👩‍👧 En tant qu'aidant, vous pourrez surveiller les données de santé de votre proche une fois associé à son compte.
+              </p>
             </div>
           )}
 

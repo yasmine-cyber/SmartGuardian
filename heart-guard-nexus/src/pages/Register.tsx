@@ -90,21 +90,21 @@ const Register = () => {
       newErrors.telephone = "Le numéro doit contenir exactement 8 chiffres.";
     }
 
-    const today = new Date();
-    today.setHours(23, 59, 59, 999);
-    const minDate = new Date(today.getFullYear() - 120, 0, 1);
-    if (!dateNaissance) {
-      newErrors.dateNaissance = "La date de naissance est obligatoire.";
-    } else {
-      const birth = new Date(dateNaissance);
-      if (birth > today) {
-        newErrors.dateNaissance = "La date ne peut pas être dans le futur.";
-      } else if (birth < minDate) {
-        newErrors.dateNaissance = "Date invalide.";
-      }
-    }
-
+    // ✅ Validations spécifiques patient uniquement
     if (role === "patient") {
+      const today = new Date();
+      today.setHours(23, 59, 59, 999);
+      const minDate = new Date(today.getFullYear() - 120, 0, 1);
+      if (!dateNaissance) {
+        newErrors.dateNaissance = "La date de naissance est obligatoire.";
+      } else {
+        const birth = new Date(dateNaissance);
+        if (birth > today) {
+          newErrors.dateNaissance = "La date ne peut pas être dans le futur.";
+        } else if (birth < minDate) {
+          newErrors.dateNaissance = "Date invalide.";
+        }
+      }
       if (maladies.length === 0) {
         newErrors.maladies = "Sélectionnez au moins une maladie.";
       } else if (maladies.includes("Autre") && !autreMaladie.trim()) {
@@ -127,15 +127,17 @@ const Register = () => {
     setLoading(true);
 
     try {
+      // ✅ FIX: envoyer prénom + nom ensemble dans "nom"
+      // car le trigger handle_new_user lit "nom" comme nom complet
+      // et le split automatiquement en prenom + nom
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             role,
-            prenom: prenom.trim(),
-            nom: nom.trim(),
-            telephone,
+            nom: `${prenom.trim()} ${nom.trim()}`, // ✅ trigger split automatiquement
+            telephone: telephone.trim(),             // ✅ important pour AuthCallback
             date_naissance: role === "patient" ? dateNaissance || null : null,
             maladies: maladiesToSave,
           },
@@ -159,16 +161,15 @@ const Register = () => {
         return;
       }
 
-      await supabase.from("utilisateurs").insert({
-        id: user.id,
-        email: user.email ?? email,
-        nom: nom.trim(),
-        prenom: prenom.trim(),
-        role: role === "proche" ? "proche" : role === "patient" ? "patient" : "patient",
-        telephone: telephone.trim() || null,
-      });
+      // ✅ FIX: NE PAS insérer dans utilisateurs manuellement
+      // le trigger handle_new_user s'en occupe automatiquement
+      // Double insert = conflit et données partielles
 
+      // ✅ Seulement l'insert patients pour le rôle patient
       if (role === "patient") {
+        // Attendre un peu que le trigger finisse
+        await new Promise(resolve => setTimeout(resolve, 500));
+
         await supabase.from("patients").insert({
           user_id: user.id,
           date_naissance: dateNaissance || null,
@@ -187,11 +188,15 @@ const Register = () => {
   const handleComplete = () => navigate("/login");
 
   const canProceedStep0 = email && password && prenom.trim() && nom.trim() && password.length >= 6;
+
+  // ✅ canProceedStep1 adapté selon le rôle
   const canProceedStep1 =
     telephone &&
-    dateNaissance &&
-    (role !== "patient" ||
-      (maladies.length > 0 && (!maladies.includes("Autre") || autreMaladie.trim().length > 0)));
+    (role === "proche"
+      ? true
+      : dateNaissance &&
+        maladies.length > 0 &&
+        (!maladies.includes("Autre") || autreMaladie.trim().length > 0));
 
   return (
     <div className="min-h-screen flex">
@@ -214,7 +219,9 @@ const Register = () => {
           </div>
 
           <h1 className="text-2xl font-bold text-foreground mb-1">Créer un compte</h1>
-          <p className="text-muted-foreground text-sm mb-6">Inscription {step === 2 ? "terminée" : "en " + (step + 1) + " étapes"}</p>
+          <p className="text-muted-foreground text-sm mb-6">
+            Inscription {step === 2 ? "terminée" : "en " + (step + 1) + " étapes"}
+          </p>
 
           {/* Step indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
@@ -225,20 +232,19 @@ const Register = () => {
                 }`}>
                   {i < step ? <Check className="w-4 h-4" /> : i + 1}
                 </div>
-                <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
+                <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>
+                  {s}
+                </span>
                 {i < 2 && <div className={`w-6 h-0.5 ${i < step ? "bg-primary" : "bg-border"}`} />}
               </div>
             ))}
           </div>
 
-          {/* Google button — only on step 0 */}
+          {/* Google button */}
           {step === 0 && (
             <>
-              <button
-                onClick={handleGoogleRegister}
-                disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-background border border-border rounded-xl text-sm font-medium text-foreground hover:bg-muted/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-4"
-              >
+              <button onClick={handleGoogleRegister} disabled={googleLoading}
+                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-background border border-border rounded-xl text-sm font-medium text-foreground hover:bg-muted/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-4">
                 {googleLoading ? <Loader className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
                 S'inscrire avec Google
               </button>
@@ -250,7 +256,6 @@ const Register = () => {
             </>
           )}
 
-          {/* Error */}
           {error && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/50 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
@@ -259,6 +264,8 @@ const Register = () => {
           )}
 
           <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+
+            {/* STEP 0 — Compte */}
             {step === 0 && (
               <motion.form
                 onSubmit={(e) => {
@@ -285,18 +292,22 @@ const Register = () => {
                   ].map((r) => (
                     <button key={r.id} type="button" onClick={() => setRole(r.id)}
                       className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
-                        role === r.id ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/20"
+                        role === r.id
+                          ? "border-primary/50 bg-primary/5 text-foreground"
+                          : "border-border text-muted-foreground hover:border-primary/20"
                       }`}>
                       <span className="text-2xl">{r.icon}</span>
                       <span className="text-sm font-medium">{r.label}</span>
                     </button>
                   ))}
                 </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)}
+                      <input type="text" placeholder="Prénom" value={prenom}
+                        onChange={(e) => setPrenom(e.target.value)}
                         className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     {fieldErrors.prenom && <p className="text-xs text-destructive mt-1">{fieldErrors.prenom}</p>}
@@ -304,24 +315,30 @@ const Register = () => {
                   <div>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)}
+                      <input type="text" placeholder="Nom" value={nom}
+                        onChange={(e) => setNom(e.target.value)}
                         className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     {fieldErrors.nom && <p className="text-xs text-destructive mt-1">{fieldErrors.nom}</p>}
                   </div>
                 </div>
+
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="email" placeholder="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)}
+                  <input type="email" placeholder="Adresse e-mail" value={email}
+                    onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
                 {fieldErrors.email && <p className="text-xs text-destructive">{fieldErrors.email}</p>}
+
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password} onChange={(e) => setPassword(e.target.value)}
+                  <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password}
+                    onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
                 {fieldErrors.password && <p className="text-xs text-destructive">{fieldErrors.password}</p>}
+
                 <button type="submit" disabled={!canProceedStep0}
                   className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage disabled:opacity-50 disabled:cursor-not-allowed">
                   Continuer <ArrowRight className="w-4 h-4" />
@@ -329,49 +346,76 @@ const Register = () => {
               </motion.form>
             )}
 
+            {/* STEP 1 — Détails */}
             {step === 1 && (
               <motion.form onSubmit={handleSignUp} className="space-y-4">
-                <h3 className="text-lg font-semibold text-card-foreground mb-4">Informations Personnelles</h3>
+                <h3 className="text-lg font-semibold text-card-foreground mb-4">
+                  {role === "proche" ? "Informations Aidant" : "Informations Patient"}
+                </h3>
                 <div className="space-y-4">
+
+                  {/* Téléphone — tous les rôles */}
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                    <input type="tel" placeholder="Numéro de téléphone" value={telephone} onChange={(e) => setTelephone(e.target.value)}
+                    <input type="tel" placeholder="Numéro de téléphone" value={telephone}
+                      onChange={(e) => setTelephone(e.target.value)}
                       className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                   </div>
                   {fieldErrors.telephone && <p className="text-xs text-destructive">{fieldErrors.telephone}</p>}
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                    <input type="date" value={dateNaissance} max={new Date().toISOString().split("T")[0]} onChange={(e) => setDateNaissance(e.target.value)}
-                      className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                  </div>
-                  {fieldErrors.dateNaissance && <p className="text-xs text-destructive">{fieldErrors.dateNaissance}</p>}
 
+                  {/* ✅ Date naissance — patient uniquement */}
                   {role === "patient" && (
-                    <div>
-                      <p className="text-base font-semibold text-card-foreground mb-3">Maladies suivies</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto bg-muted/40 rounded-2xl p-4 border border-border/60">
-                        {maladiesRef.map((m) => {
-                          const checked = maladies.includes(m.nom);
-                          return (
-                            <label key={m.id} className="flex items-start gap-3 text-sm text-foreground cursor-pointer rounded-xl p-2 hover:bg-muted/40 transition-colors">
-                              <input type="checkbox" checked={checked}
-                                onChange={() => setMaladies((prev) => checked ? prev.filter((x) => x !== m.nom) : [...prev, m.nom])}
-                                className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
-                              <span className="leading-snug">{m.nom}</span>
-                            </label>
-                          );
-                        })}
+                    <>
+                      <div className="relative">
+                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                        <input type="date" value={dateNaissance}
+                          max={new Date().toISOString().split("T")[0]}
+                          onChange={(e) => setDateNaissance(e.target.value)}
+                          className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all" />
                       </div>
-                      {maladies.includes("Autre") && (
-                        <div className="mt-3">
-                          <input type="text" placeholder="Exemple : Maladie auto-immune rare" value={autreMaladie} onChange={(e) => setAutreMaladie(e.target.value)}
-                            className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                      {fieldErrors.dateNaissance && <p className="text-xs text-destructive">{fieldErrors.dateNaissance}</p>}
+
+                      {/* ✅ Maladies — patient uniquement */}
+                      <div>
+                        <p className="text-base font-semibold text-card-foreground mb-3">Maladies suivies</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto bg-muted/40 rounded-2xl p-4 border border-border/60">
+                          {maladiesRef.map((m) => {
+                            const checked = maladies.includes(m.nom);
+                            return (
+                              <label key={m.id} className="flex items-start gap-3 text-sm text-foreground cursor-pointer rounded-xl p-2 hover:bg-muted/40 transition-colors">
+                                <input type="checkbox" checked={checked}
+                                  onChange={() => setMaladies((prev) =>
+                                    checked ? prev.filter((x) => x !== m.nom) : [...prev, m.nom]
+                                  )}
+                                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
+                                <span className="leading-snug">{m.nom}</span>
+                              </label>
+                            );
+                          })}
                         </div>
-                      )}
-                      {fieldErrors.maladies && <p className="mt-1 text-xs text-destructive">{fieldErrors.maladies}</p>}
+                        {maladies.includes("Autre") && (
+                          <div className="mt-3">
+                            <input type="text" placeholder="Exemple : Maladie auto-immune rare"
+                              value={autreMaladie} onChange={(e) => setAutreMaladie(e.target.value)}
+                              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                          </div>
+                        )}
+                        {fieldErrors.maladies && <p className="mt-1 text-xs text-destructive">{fieldErrors.maladies}</p>}
+                      </div>
+                    </>
+                  )}
+
+                  {/* ✅ Message informatif pour le proche */}
+                  {role === "proche" && (
+                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
+                      <p className="text-sm text-foreground font-medium mb-1">👨‍👩‍👧 Compte Aidant</p>
+                      <p className="text-xs text-muted-foreground">
+                        Vous pourrez être associé à un patient depuis vos paramètres après la connexion.
+                      </p>
                     </div>
                   )}
                 </div>
+
                 <div className="flex gap-3 mt-6">
                   <button type="button" onClick={() => setStep(0)}
                     className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm text-muted-foreground hover:text-foreground border border-border hover:border-primary/20 transition-all">
@@ -379,19 +423,25 @@ const Register = () => {
                   </button>
                   <button type="submit" disabled={!canProceedStep1 || loading}
                     className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage disabled:opacity-50 disabled:cursor-not-allowed">
-                    {loading ? <><Loader className="w-4 h-4 animate-spin" /> Création...</> : <>S'inscrire <ArrowRight className="w-4 h-4" /></>}
+                    {loading
+                      ? <><Loader className="w-4 h-4 animate-spin" /> Création...</>
+                      : <>S'inscrire <ArrowRight className="w-4 h-4" /></>
+                    }
                   </button>
                 </div>
               </motion.form>
             )}
 
+            {/* STEP 2 — Confirmé */}
             {step === 2 && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8">
                 <div className="w-16 h-16 rounded-full bg-safe/10 flex items-center justify-center mx-auto mb-4">
                   <Check className="w-8 h-8 text-safe" />
                 </div>
                 <h3 className="text-xl font-bold text-card-foreground mb-2">Inscription Réussie !</h3>
-                <p className="text-muted-foreground text-sm mb-6">Vérifiez votre email pour confirmer votre compte, puis connectez-vous.</p>
+                <p className="text-muted-foreground text-sm mb-6">
+                  Vérifiez votre email pour confirmer votre compte, puis connectez-vous.
+                </p>
                 <button onClick={handleComplete}
                   className="bg-primary text-primary-foreground px-8 py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage">
                   Aller à la Connexion

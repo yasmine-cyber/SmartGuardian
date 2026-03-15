@@ -17,22 +17,46 @@ const ResetPassword = () => {
   const [sessionReady, setSessionReady] = useState(false);
   const navigate = useNavigate();
 
-  // Supabase injecte automatiquement le token dans la session via le hash de l'URL
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) {
-        setSessionReady(true);
-      } else {
-        // Écouter l'événement PASSWORD_RECOVERY
-        const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === "PASSWORD_RECOVERY" && session) {
-            setSessionReady(true);
-          }
-        });
-        return () => listener.subscription.unsubscribe();
-      }
-    });
-  }, []);
+    // ✅ FIX: Lire le token directement depuis le hash de l'URL
+    // Supabase envoie: /reset-password#access_token=xxx&type=recovery
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
+    const type = hashParams.get("type");
+
+    if (accessToken && type === "recovery") {
+      // ✅ Token de reset présent dans l'URL → définir la session
+      supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken || "",
+      }).then(({ error: sessionError }) => {
+        if (sessionError) {
+          console.error("Erreur session:", sessionError.message);
+          navigate("/login");
+        } else {
+          setSessionReady(true);
+        }
+      });
+    } else {
+      // Pas de token dans l'URL → écouter PASSWORD_RECOVERY
+      const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+        if (event === "PASSWORD_RECOVERY" && session) {
+          setSessionReady(true);
+        }
+      });
+
+      // ✅ Timeout 15 secondes — lien invalide → login
+      const timeout = setTimeout(() => {
+        navigate("/login");
+      }, 15000);
+
+      return () => {
+        listener.subscription.unsubscribe();
+        clearTimeout(timeout);
+      };
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,9 +87,7 @@ const ResetPassword = () => {
     setLoading(true);
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
-        password,
-      });
+      const { error: updateError } = await supabase.auth.updateUser({ password });
 
       if (updateError) {
         setError(updateError.message);
@@ -73,8 +95,6 @@ const ResetPassword = () => {
       }
 
       setDone(true);
-
-      // Redirection automatique après 3 secondes
       setTimeout(() => navigate("/login"), 3000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Une erreur est survenue");
@@ -83,7 +103,6 @@ const ResetPassword = () => {
     }
   };
 
-  // Calcul force du mot de passe
   const getStrength = (pwd: string) => {
     if (!pwd) return { label: "", color: "", width: "0%" };
     let score = 0;
@@ -123,7 +142,6 @@ const ResetPassword = () => {
           transition={{ duration: 0.5 }}
           className="w-full max-w-md"
         >
-          {/* Mobile logo */}
           <div className="lg:hidden text-center mb-8">
             <Link to="/" className="inline-flex items-center gap-2">
               <Heart className="w-8 h-8 text-primary animate-heartbeat" />
@@ -142,6 +160,9 @@ const ResetPassword = () => {
               >
                 <Loader className="w-8 h-8 text-primary animate-spin mx-auto mb-4" />
                 <p className="text-muted-foreground text-sm">Vérification du lien...</p>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Redirection automatique dans 15s si le lien est invalide
+                </p>
               </motion.div>
             ) : !done ? (
               <motion.div
@@ -165,7 +186,6 @@ const ResetPassword = () => {
                 )}
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                  {/* Nouveau mot de passe */}
                   <div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
@@ -187,7 +207,6 @@ const ResetPassword = () => {
                       </button>
                     </div>
 
-                    {/* Barre de force */}
                     {password && (
                       <div className="mt-2">
                         <div className="h-1 w-full bg-muted rounded-full overflow-hidden">
@@ -201,13 +220,9 @@ const ResetPassword = () => {
                         <p className="text-xs text-muted-foreground mt-1">{strength.label}</p>
                       </div>
                     )}
-
-                    {passwordHint && (
-                      <p className="text-xs text-destructive mt-1">{passwordHint}</p>
-                    )}
+                    {passwordHint && <p className="text-xs text-destructive mt-1">{passwordHint}</p>}
                   </div>
 
-                  {/* Confirmation */}
                   <div>
                     <div className="relative">
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
@@ -228,9 +243,7 @@ const ResetPassword = () => {
                         {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
-                    {confirmHint && (
-                      <p className="text-xs text-destructive mt-1">{confirmHint}</p>
-                    )}
+                    {confirmHint && <p className="text-xs text-destructive mt-1">{confirmHint}</p>}
                   </div>
 
                   <button
@@ -239,9 +252,7 @@ const ResetPassword = () => {
                     className="w-full bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {loading ? (
-                      <>
-                        <Loader className="w-4 h-4 animate-spin" /> Mise à jour...
-                      </>
+                      <><Loader className="w-4 h-4 animate-spin" /> Mise à jour...</>
                     ) : (
                       "Réinitialiser le mot de passe"
                     )}
@@ -263,12 +274,9 @@ const ResetPassword = () => {
                   Mot de passe mis à jour !
                 </h1>
                 <p className="text-muted-foreground text-sm mb-6">
-                  Votre mot de passe a été réinitialisé avec succès. Vous allez être redirigé vers la connexion...
+                  Votre mot de passe a été réinitialisé avec succès. Vous allez être redirigé...
                 </p>
-                <Link
-                  to="/login"
-                  className="text-sm text-primary hover:underline font-medium"
-                >
+                <Link to="/login" className="text-sm text-primary hover:underline font-medium">
                   Se connecter maintenant
                 </Link>
               </motion.div>

@@ -1,8 +1,9 @@
+import { useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useNavigate } from "react-router-dom";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
@@ -26,7 +27,6 @@ import Unauthorized from "@/pages/Unauthorized";
 import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
-// ── Patient sub-pages (both branches merged) ──
 import PatientMessages  from "@/pages/PatientMessages";
 import PatientVitals    from "@/pages/PatientVitals";
 import PatientAlerts    from "@/pages/PatientAlerts";
@@ -37,12 +37,42 @@ import PatientSettings  from "@/pages/PatientSettings";
 
 const queryClient = new QueryClient();
 
+// ✅ Intercepte les hash Supabase au démarrage
+// Supabase redirige vers /#access_token=xxx&type=recovery
+// Ce composant redirige vers la bonne page en gardant le hash
+const SupabaseHashHandler = () => {
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash || hash === "#") return;
+
+    const params = new URLSearchParams(hash.substring(1));
+    const type = params.get("type");
+    const accessToken = params.get("access_token");
+
+    if (!accessToken) return;
+
+    if (type === "recovery") {
+      // ✅ Lien reset password → rediriger vers /reset-password avec le hash
+      navigate(`/reset-password${hash}`, { replace: true });
+    } else if (type === "invite") {
+      // ✅ Lien invitation médecin → rediriger vers /set-password avec le hash
+      navigate(`/set-password${hash}`, { replace: true });
+    }
+  }, [navigate]);
+
+  return null;
+};
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <TooltipProvider>
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        {/* ✅ Doit être à l'intérieur de BrowserRouter */}
+        <SupabaseHashHandler />
         <Routes>
           {/* Public routes */}
           <Route path="/" element={<Index />} />
