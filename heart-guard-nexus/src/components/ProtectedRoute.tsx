@@ -40,7 +40,7 @@ const ProtectedRoute = ({ children, allowedRoles }: ProtectedRouteProps) => {
     };
 
     checkAuth();
-  }, []);
+  }, [allowedRoles]);
 
   if (status === "loading") {
     return (

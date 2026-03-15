@@ -24,7 +24,6 @@ import Unauthorized from "@/pages/Unauthorized";
 import SetPassword from "@/pages/SetPassword";
 import AuthCallback from "@/pages/AuthCallback";
 import CompleteProfile from "@/pages/CompleteProfile";
-import MesMedecins from "@/pages/MesMedecins";
 // ── Patient sub-pages (both branches merged) ──
 import PatientMessages  from "@/pages/PatientMessages";
 import PatientVitals    from "@/pages/PatientVitals";

@@ -34,6 +34,7 @@ const GoogleIcon = () => (
 );
 
 interface FieldErrors {
+  prenom?: string;
   nom?: string;
   email?: string;
   password?: string;
@@ -52,6 +53,7 @@ const Register = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [prenom, setPrenom] = useState("");
   const [nom, setNom] = useState("");
   const [role, setRole] = useState("patient");
   const [telephone, setTelephone] = useState("");
@@ -131,7 +133,8 @@ const Register = () => {
         options: {
           data: {
             role,
-            nom,
+            prenom: prenom.trim(),
+            nom: nom.trim(),
             telephone,
             date_naissance: role === "patient" ? dateNaissance || null : null,
             maladies: maladiesToSave,
@@ -156,7 +159,16 @@ const Register = () => {
         return;
       }
 
-      if (role === "patient" && data.session) {
+      await supabase.from("utilisateurs").insert({
+        id: user.id,
+        email: user.email ?? email,
+        nom: nom.trim(),
+        prenom: prenom.trim(),
+        role: role === "proche" ? "proche" : role === "patient" ? "patient" : "patient",
+        telephone: telephone.trim() || null,
+      });
+
+      if (role === "patient") {
         await supabase.from("patients").insert({
           user_id: user.id,
           date_naissance: dateNaissance || null,
@@ -174,7 +186,7 @@ const Register = () => {
 
   const handleComplete = () => navigate("/login");
 
-  const canProceedStep0 = email && password && nom && password.length >= 6;
+  const canProceedStep0 = email && password && prenom.trim() && nom.trim() && password.length >= 6;
   const canProceedStep1 =
     telephone &&
     dateNaissance &&
@@ -252,9 +264,8 @@ const Register = () => {
                 onSubmit={(e) => {
                   e.preventDefault();
                   const newErrors: FieldErrors = {};
-                  const nomParts = nom.trim().split(/\s+/).filter(Boolean);
-                  if (!nom.trim()) newErrors.nom = "Le nom complet est obligatoire.";
-                  else if (nomParts.length < 2) newErrors.nom = "Indiquez au moins deux parties (ex. : Prénom Nom).";
+                  if (!prenom.trim()) newErrors.prenom = "Le prénom est obligatoire.";
+                  if (!nom.trim()) newErrors.nom = "Le nom est obligatoire.";
                   const trimmedEmail = email.trim();
                   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
                   if (!trimmedEmail) newErrors.email = "L'adresse e-mail est obligatoire.";
@@ -281,12 +292,24 @@ const Register = () => {
                     </button>
                   ))}
                 </div>
-                <div className="relative">
-                  <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="text" placeholder="Nom complet" value={nom} onChange={(e) => setNom(e.target.value)}
-                    className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                      <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)}
+                        className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                    </div>
+                    {fieldErrors.prenom && <p className="text-xs text-destructive mt-1">{fieldErrors.prenom}</p>}
+                  </div>
+                  <div>
+                    <div className="relative">
+                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                      <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)}
+                        className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                    </div>
+                    {fieldErrors.nom && <p className="text-xs text-destructive mt-1">{fieldErrors.nom}</p>}
+                  </div>
                 </div>
-                {fieldErrors.nom && <p className="text-xs text-destructive">{fieldErrors.nom}</p>}
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
                   <input type="email" placeholder="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)}

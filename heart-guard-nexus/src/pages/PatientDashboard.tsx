@@ -76,10 +76,10 @@ const PatientDashboard = () => {
       // Nom utilisateur
       const { data: util } = await supabase
         .from("utilisateurs")
-        .select("nom")
+        .select("nom, prenom")
         .eq("id", user.id)
         .single();
-      if (util?.nom) setUserName(util.nom);
+      if (util) setUserName([util.prenom, util.nom].filter(Boolean).join(" ").trim() || util.nom || "");
 
       // Patient ID
       const { data: patient } = await supabase

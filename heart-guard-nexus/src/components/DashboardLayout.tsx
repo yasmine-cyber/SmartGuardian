@@ -94,12 +94,13 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
       const { data, error } = await supabase
         .from("utilisateurs")
-        .select("nom, photo_url")
+        .select("nom, prenom, photo_url")
         .eq("id", user.id)
         .single();
 
       if (!error && data) {
-        if (data.nom) setUserName(data.nom);
+        const fullName = [data.prenom, data.nom].filter(Boolean).join(" ").trim();
+        if (fullName) setUserName(fullName);
         if (data.photo_url) setPhotoUrl(data.photo_url);
       }
     };

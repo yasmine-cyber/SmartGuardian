@@ -12,6 +12,7 @@ type Medecin = {
   numero_licence: string;
   utilisateurs: {
     nom: string;
+    prenom: string;
     email: string;
     telephone: string | null;
   } | null;
@@ -49,7 +50,7 @@ const MesMedecins = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("medecins")
-        .select("id, specialite, numero_licence, utilisateurs(nom, email, telephone)");
+        .select("id, specialite, numero_licence, utilisateurs(nom, prenom, email, telephone)");
       if (error) throw error;
       return (data || []) as unknown as Medecin[];
     },
@@ -190,12 +191,12 @@ const MesMedecins = () => {
               <div className="flex items-center gap-3">
                 <div className="w-11 h-11 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                   <span className="text-primary font-bold text-base">
-                    {m.utilisateurs?.nom?.charAt(0) ?? "?"}
+                    {`${m.utilisateurs?.prenom?.[0] ?? ""}${m.utilisateurs?.nom?.[0] ?? ""}`.toUpperCase() || "?"}
                   </span>
                 </div>
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-card-foreground truncate">
-                    {m.utilisateurs?.nom ?? "—"}
+                    {[m.utilisateurs?.prenom, m.utilisateurs?.nom].filter(Boolean).join(" ") || "—"}
                   </p>
                   <div className="flex items-center gap-1 mt-0.5">
                     <Stethoscope className="w-3 h-3 text-primary" />

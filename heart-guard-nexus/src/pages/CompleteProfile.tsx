@@ -35,6 +35,8 @@ const CompleteProfile = () => {
   const [role, setRole] = useState("patient");
   const [maladies, setMaladies] = useState<string[]>([]);
   const [autreMaladie, setAutreMaladie] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteCodeError, setInviteCodeError] = useState("");
 
   useEffect(() => {
     const load = async () => {
@@ -69,12 +71,14 @@ const CompleteProfile = () => {
     if (!telephone.trim() || phoneDigits.length !== 8) {
       setError("Le numéro doit contenir exactement 8 chiffres."); return;
     }
-    if (!dateNaissance) { setError("La date de naissance est obligatoire."); return; }
-    if (role === "patient" && maladies.length === 0) {
-      setError("Sélectionnez au moins une maladie."); return;
-    }
-    if (maladies.includes("Autre") && !autreMaladie.trim()) {
-      setError("Précisez la maladie pour le choix \"Autre\"."); return;
+    if (role === "patient") {
+      if (!dateNaissance) { setError("La date de naissance est obligatoire."); return; }
+      if (maladies.length === 0) {
+        setError("Sélectionnez au moins une maladie."); return;
+      }
+      if (maladies.includes("Autre") && !autreMaladie.trim()) {
+        setError("Précisez la maladie pour le choix \"Autre\"."); return;
+      }
     }
 
     setLoading(true);
@@ -127,6 +131,25 @@ const CompleteProfile = () => {
             maladies: maladiesToSave,
           });
         }
+      }
+
+      // If proche and they entered an invite code, consume it to link to the patient
+      if (role === "proche" && inviteCode.trim()) {
+        const { data: rpcResult, error: rpcErr } = await supabase.rpc("consume_invite_code", {
+          p_code: inviteCode.trim(),
+        });
+        if (rpcErr) {
+          setInviteCodeError(rpcErr.message || "Code invalide ou expiré.");
+          setLoading(false);
+          return;
+        }
+        const res = rpcResult as { ok?: boolean; error?: string };
+        if (res && res.ok === false && res.error) {
+          setInviteCodeError(res.error);
+          setLoading(false);
+          return;
+        }
+        setInviteCodeError("");
       }
 
       // Redirect to dashboard
@@ -205,16 +228,32 @@ const CompleteProfile = () => {
               className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
           </div>
 
-          {/* Date de naissance */}
-          <div>
-            <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
-              <Calendar className="w-3.5 h-3.5" /> Date de naissance
-            </label>
-            <input type="date" value={dateNaissance}
-              max={new Date().toISOString().split("T")[0]}
-              onChange={(e) => setDateNaissance(e.target.value)}
-              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
-          </div>
+          {/* Date de naissance — patient only */}
+          {role === "patient" && (
+            <div>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                <Calendar className="w-3.5 h-3.5" /> Date de naissance
+              </label>
+              <input type="date" value={dateNaissance}
+                max={new Date().toISOString().split("T")[0]}
+                onChange={(e) => setDateNaissance(e.target.value)}
+                className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
+            </div>
+          )}
+
+          {/* Code d'invitation — proche only */}
+          {role === "proche" && (
+            <div>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                Code d&apos;invitation
+              </label>
+              <input type="text" value={inviteCode} onChange={(e) => { setInviteCode(e.target.value); setInviteCodeError(""); }}
+                placeholder="Code fourni par la personne que vous accompagnez"
+                className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all" />
+              {inviteCodeError && <p className="text-xs text-destructive mt-1">{inviteCodeError}</p>}
+              <p className="text-xs text-muted-foreground mt-1">Demandez un code à la personne que vous souhaitez accompagner (depuis son espace Paramètres → Proches).</p>
+            </div>
+          )}
 
           {/* Maladies — patient only */}
           {role === "patient" && (
