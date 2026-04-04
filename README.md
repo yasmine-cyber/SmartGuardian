@@ -1,53 +1,73 @@
-# SmartGuardian
+# Welcome to your Lovable project
 
-Projet de télésurveillance médicale.
+## Project info
 
-Cette application utilise :
+**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
-- React + Vite pour le frontend
-- Supabase pour le backend (auth, base de données, realtime, storage)
-- PWA pour un accès mobile et offline
+## How can I edit this code?
 
-## Objectif
+There are several ways of editing your application.
 
-Permettre le suivi médical des patients avec :
+**Use Lovable**
 
-- mesures biométriques (HR, SpO₂, température…)
-- alertes temps réel pour le médecin
-- interface web et mobile-friendly
+Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
 
-## Frontend
+Changes made via Lovable will be committed automatically to this repo.
 
-Le frontend se trouve dans le dossier `heart-guard-nexus/`.
+**Use your preferred IDE**
 
-### Lancer en local
+If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
 
-```bash
-cd heart-guard-nexus
-npm install
+The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+
+Follow these steps:
+
+```sh
+# Step 1: Clone the repository using the project's Git URL.
+git clone <YOUR_GIT_URL>
+
+# Step 2: Navigate to the project directory.
+cd <YOUR_PROJECT_NAME>
+
+# Step 3: Install the necessary dependencies.
+npm i
+
+# Step 4: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 
-## Auth & rôles (Supabase)
+**Edit a file directly in GitHub**
 
-Le système utilise un type enum `user_role` côté Supabase :
+- Navigate to the desired file(s).
+- Click the "Edit" button (pencil icon) at the top right of the file view.
+- Make your changes and commit the changes.
 
-- `admin`
-- `medecin`
-- `patient`
-- `proche` (aidant)
+**Use GitHub Codespaces**
 
-### Inscription (signup)
+- Navigate to the main page of your repository.
+- Click on the "Code" button (green button) near the top right.
+- Select the "Codespaces" tab.
+- Click on "New codespace" to launch a new Codespace environment.
+- Edit files directly within the Codespace and commit and push your changes once you're done.
 
-- Seuls **`patient`** et **`proche`** sont proposés à l’inscription dans l’UI.
-- **`admin`** et **`medecin`** ne s’inscrivent pas depuis l’interface : ils sont créés/provisionnés par un admin (ex. invitation email), puis se connectent.
+## What technologies are used for this project?
 
-### Trigger de création du profil
+This project is built with:
 
-Un trigger `handle_new_user` (sur `auth.users`) crée automatiquement la ligne correspondante dans `public.utilisateurs` à l’inscription, en lisant `raw_user_meta_data` (ex. `role`, `nom`).
+- Vite
+- TypeScript
+- React
+- shadcn-ui
+- Tailwind CSS
 
-### Dépannage : erreur 500 au signup
+## How can I deploy this project?
 
-Si `POST /auth/v1/signup` renvoie **500** avec `unexpected_failure`, la cause est généralement dans le trigger `handle_new_user` (ex. **RLS**, permissions, contrainte).
+Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
 
-- Vérifier dans Supabase **Database → Logs → Errors** le message Postgres exact après une tentative de signup.
+## Can I connect a custom domain to my Lovable project?
+
+Yes, you can!
+
+To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+
+Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)

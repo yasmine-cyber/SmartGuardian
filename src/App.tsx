@@ -18,6 +18,12 @@ import FamilyDashboard from "./pages/FamilyDashboard";
 import FamilyAlerts from "./pages/FamilyAlerts";
 import FamilyParametres from "./pages/FamilyParametres";
 import AdminDashboard from "./pages/AdminDashboard";
+import AdminUsers from "./pages/AdminUsers";
+import AdminDevices from "./pages/AdminDevices";
+import AdminRoles from "./pages/AdminRoles";
+import AdminThresholds from "./pages/AdminThresholds";
+import AdminLogs from "./pages/AdminLogs";
+import AdminSystem from "./pages/AdminSystem";
 import NotFound from "./pages/NotFound";
 import ForgotPassword from "@/pages/ForgotPassword";
 import ResetPassword from "@/pages/ResetPassword";
@@ -37,9 +43,6 @@ import PatientSettings  from "@/pages/PatientSettings";
 
 const queryClient = new QueryClient();
 
-// ✅ Intercepte les hash Supabase au démarrage
-// Supabase redirige vers /#access_token=xxx&type=recovery
-// Ce composant redirige vers la bonne page en gardant le hash
 const SupabaseHashHandler = () => {
   const navigate = useNavigate();
 
@@ -54,10 +57,8 @@ const SupabaseHashHandler = () => {
     if (!accessToken) return;
 
     if (type === "recovery") {
-      // ✅ Lien reset password → rediriger vers /reset-password avec le hash
       navigate(`/reset-password${hash}`, { replace: true });
     } else if (type === "invite") {
-      // ✅ Lien invitation médecin → rediriger vers /set-password avec le hash
       navigate(`/set-password${hash}`, { replace: true });
     }
   }, [navigate]);
@@ -71,10 +72,9 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        {/* ✅ Doit être à l'intérieur de BrowserRouter */}
         <SupabaseHashHandler />
         <Routes>
-          {/* Public routes */}
+          {/* Public */}
           <Route path="/" element={<Index />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -85,8 +85,8 @@ const App = () => (
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/complete-profile" element={<CompleteProfile />} />
 
-          {/* Patient routes */}
-          <Route path="/patient" element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
+          {/* Patient */}
+          <Route path="/patient"           element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
           <Route path="/patient/profile"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
           <Route path="/patient/medecins"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMedecins /></ProtectedRoute>} />
           <Route path="/patient/messages"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
@@ -97,7 +97,7 @@ const App = () => (
           <Route path="/patient/settings"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientSettings /></ProtectedRoute>} />
           <Route path="/patient/*"         element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
 
-          {/* Doctor routes */}
+          {/* Doctor */}
           <Route path="/doctor"            element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
           <Route path="/doctor/patients"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
           <Route path="/doctor/alerts"     element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
@@ -106,14 +106,21 @@ const App = () => (
           <Route path="/doctor/settings"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
           <Route path="/doctor/*"          element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
 
-          {/* Family routes */}
-          <Route path="/family" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
-          <Route path="/family/alerts" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyAlerts /></ProtectedRoute>} />
+          {/* Family */}
+          <Route path="/family"            element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+          <Route path="/family/alerts"     element={<ProtectedRoute allowedRoles={["proche"]}><FamilyAlerts /></ProtectedRoute>} />
           <Route path="/family/parametres" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyParametres /></ProtectedRoute>} />
-          <Route path="/family/*" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+          <Route path="/family/*"          element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
 
-          {/* Admin routes */}
-          <Route path="/admin/*"  element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+          {/* Admin — routes séparées */}
+          <Route path="/admin"             element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/admin/users"       element={<ProtectedRoute allowedRoles={["admin"]}><AdminUsers /></ProtectedRoute>} />
+          <Route path="/admin/devices"     element={<ProtectedRoute allowedRoles={["admin"]}><AdminDevices /></ProtectedRoute>} />
+          <Route path="/admin/roles"       element={<ProtectedRoute allowedRoles={["admin"]}><AdminRoles /></ProtectedRoute>} />
+          <Route path="/admin/thresholds"  element={<ProtectedRoute allowedRoles={["admin"]}><AdminThresholds /></ProtectedRoute>} />
+          <Route path="/admin/logs"        element={<ProtectedRoute allowedRoles={["admin"]}><AdminLogs /></ProtectedRoute>} />
+          <Route path="/admin/system"      element={<ProtectedRoute allowedRoles={["admin"]}><AdminSystem /></ProtectedRoute>} />
+          <Route path="/admin/*"           element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
 
           {/* 404 */}
           <Route path="*" element={<NotFound />} />
