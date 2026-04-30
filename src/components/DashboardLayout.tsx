@@ -38,6 +38,7 @@ const navItems: Record<Role, NavItem[]> = {
   ],
   family: [
     { icon: Heart, label: "Mes Proches", path: "/family" },
+    { icon: MessageSquare, label: "Messagerie", path: "/family/messages" },
     { icon: Bell, label: "Alertes", path: "/family/alerts" },
     { icon: Settings, label: "Paramètres", path: "/family/parametres" },
   ],

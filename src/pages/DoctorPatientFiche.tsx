@@ -1,0 +1,694 @@
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import {
+  ArrowLeft, MessageCircle, Heart, Thermometer, Activity,
+  Battery, MapPin, AlertTriangle, Clock, User, Phone,
+  Home, Stethoscope, FileText, Users, Wifi, WifiOff,
+  ChevronRight, Save, Loader, CheckCircle, TrendingUp,
+  Shield, Zap
+} from "lucide-react";
+import DashboardLayout from "@/components/DashboardLayout";
+import StatusBadge from "@/components/StatusBadge";
+import LiveECGChart from "@/components/LiveECGChart";
+import { supabase } from "@/lib/supabase";
+import { toast } from "sonner";
+import { format, formatDistanceToNow } from "date-fns";
+import { fr } from "date-fns/locale";
+import {
+  LineChart, Line, ResponsiveContainer, XAxis, YAxis,
+  Tooltip, CartesianGrid, ReferenceLine
+} from "recharts";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+interface PatientFiche {
+  id: string;
+  user_id: string;
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone: string;
+  sexe: string | null;
+  date_naissance: string;
+  adresse: string;
+  maladies: string[];
+  antecedents: string;
+  traitements: string[];
+  notes_medecin: string;
+  status: string;
+}
+
+interface Device {
+  id: string;
+  actif: boolean;
+  dernier_signal: string | null;
+}
+
+interface VitalSign {
+  id: string;
+  bpm: number | null;
+  spo2: number | null;
+  temperature: number | null;
+  niveau_batterie: number | null;
+  chute: boolean | null;
+  latitude: number | null;
+  longitude: number | null;
+  recorded_at: string;
+}
+
+interface Alert {
+  id: string;
+  severity: string;
+  type: string;
+  message: string;
+  resolved: boolean;
+  created_at: string;
+}
+
+interface Anomalie {
+  id: string;
+  type_anomalie: string;
+  score_confiance: number | null;
+  detected_at: string;
+}
+
+interface Proche {
+  proche_id: string;
+  nom: string;
+  prenom: string;
+  telephone: string | null;
+  email: string | null;
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+const age = (dob: string) => {
+  if (!dob) return "—";
+  return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
+};
+
+const severityColor: Record<string, string> = {
+  CRITICAL: "text-red-500 bg-red-500/10 border-red-500/20",
+  HIGH:     "text-orange-500 bg-orange-500/10 border-orange-500/20",
+  MEDIUM:   "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
+  LOW:      "text-green-500 bg-green-500/10 border-green-500/20",
+};
+
+const batteryColor = (level: number | null) => {
+  if (!level) return "text-muted-foreground";
+  if (level > 60) return "text-green-500";
+  if (level > 30) return "text-yellow-500";
+  return "text-red-500";
+};
+
+// ── Section card ──────────────────────────────────────────────────────────────
+const Section = ({ title, icon, children, className = "" }: {
+  title: string; icon: React.ReactNode; children: React.ReactNode; className?: string;
+}) => (
+  <div className={`bg-card border border-border rounded-2xl p-5 shadow-sm ${className}`}>
+    <div className="flex items-center gap-2 mb-4">
+      <span className="text-primary">{icon}</span>
+      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    </div>
+    {children}
+  </div>
+);
+
+// ── Vital mini card ───────────────────────────────────────────────────────────
+const VitalMini = ({ icon, label, value, unit, color = "text-foreground" }: {
+  icon: React.ReactNode; label: string; value: string | number | null;
+  unit: string; color?: string;
+}) => (
+  <div className="bg-muted/50 rounded-xl p-3 flex flex-col gap-1">
+    <div className="flex items-center gap-1.5 text-muted-foreground">
+      {icon}
+      <span className="text-xs">{label}</span>
+    </div>
+    <div className="flex items-baseline gap-1">
+      <span className={`text-xl font-bold ${color}`}>{value ?? "—"}</span>
+      <span className="text-xs text-muted-foreground">{unit}</span>
+    </div>
+  </div>
+);
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+const DoctorPatientFiche = () => {
+  const { patientId } = useParams<{ patientId: string }>();
+  const navigate = useNavigate();
+
+  const [patient, setPatient]       = useState<PatientFiche | null>(null);
+  const [device, setDevice]         = useState<Device | null>(null);
+  const [latestVital, setLatestVital] = useState<VitalSign | null>(null);
+  const [vitalsHistory, setVitalsHistory] = useState<VitalSign[]>([]);
+  const [alerts, setAlerts]         = useState<Alert[]>([]);
+  const [anomalies, setAnomalies]   = useState<Anomalie[]>([]);
+  const [proches, setProches]       = useState<Proche[]>([]);
+  const [notes, setNotes]           = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesSaved, setNotesSaved] = useState(false);
+  const [loading, setLoading]       = useState(true);
+  const [activeVitalTab, setActiveVitalTab] = useState<"bpm" | "spo2" | "temperature">("bpm");
+
+  const load = useCallback(async () => {
+    if (!patientId) return;
+
+    // ── Patient ──────────────────────────────────────────────
+    const { data: p } = await supabase
+      .from("patients")
+      .select(`id, user_id, maladies, date_naissance, adresse, antecedents, traitements, notes_medecin, status,
+               utilisateurs!patients_user_id_fkey(nom, prenom, email, telephone, sexe)`)
+      .eq("id", patientId)
+      .single();
+
+    if (!p) { navigate("/doctor/patients"); return; }
+
+    const u = p.utilisateurs as any;
+    const mapped: PatientFiche = {
+      id: p.id, user_id: p.user_id,
+      nom: u?.nom || "", prenom: u?.prenom || "",
+      email: u?.email || "", telephone: u?.telephone || "",
+      sexe: u?.sexe || null,
+      date_naissance: p.date_naissance || "",
+      adresse: p.adresse || "", maladies: p.maladies || [],
+      antecedents: p.antecedents || "", traitements: p.traitements || [],
+      notes_medecin: p.notes_medecin || "", status: p.status || "offline",
+    };
+    setPatient(mapped);
+    setNotes(mapped.notes_medecin);
+
+    // ── Device ───────────────────────────────────────────────
+    const { data: devData } = await supabase
+      .from("devices")
+      .select("id, actif, dernier_signal")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    setDevice(devData as Device | null);
+
+    if (devData) {
+      // ── Latest vital ─────────────────────────────────────
+      const { data: vLatest } = await supabase
+        .from("vital_signs")
+        .select("id, bpm, spo2, temperature, niveau_batterie, chute, latitude, longitude, recorded_at")
+        .eq("device_id", devData.id)
+        .order("recorded_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setLatestVital(vLatest as VitalSign | null);
+
+      // ── History (last 50 points) ─────────────────────────
+      const { data: vHistory } = await supabase
+        .from("vital_signs")
+        .select("id, bpm, spo2, temperature, recorded_at")
+        .eq("device_id", devData.id)
+        .order("recorded_at", { ascending: true })
+        .limit(50);
+      setVitalsHistory((vHistory as VitalSign[]) || []);
+    }
+
+    // ── Alerts (last 5 unresolved) ───────────────────────────
+    const { data: aData } = await supabase
+      .from("alerts")
+      .select("id, severity, type, message, resolved, created_at")
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .limit(5);
+    setAlerts((aData as Alert[]) || []);
+
+    // ── Anomalies (last 5) ───────────────────────────────────
+    const { data: anData } = await supabase
+      .from("anomalies")
+      .select("id, type_anomalie, score_confiance, detected_at")
+      .eq("patient_id", patientId)
+      .order("detected_at", { ascending: false })
+      .limit(5);
+    setAnomalies((anData as Anomalie[]) || []);
+
+    // ── Proches ──────────────────────────────────────────────
+    const { data: ppData } = await supabase
+      .from("proche_patient")
+      .select("proche_id, utilisateurs!proche_patient_proche_id_fkey(nom, prenom, email, telephone)")
+      .eq("patient_id", p.user_id);
+    setProches(
+      (ppData || []).map((pp: any) => {
+        const pu = Array.isArray(pp.utilisateurs) ? pp.utilisateurs[0] : pp.utilisateurs;
+        return { proche_id: pp.proche_id, nom: pu?.nom || "", prenom: pu?.prenom || "",
+                 telephone: pu?.telephone || null, email: pu?.email || null };
+      })
+    );
+
+    setLoading(false);
+  }, [patientId, navigate]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSaveNotes = async () => {
+    if (!patient) return;
+    setSavingNotes(true);
+    const { error } = await supabase
+      .from("patients")
+      .update({ notes_medecin: notes, updated_at: new Date().toISOString() })
+      .eq("id", patient.id);
+    if (!error) { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 3000); }
+    else toast.error("Erreur lors de la sauvegarde");
+    setSavingNotes(false);
+  };
+
+  const handleStartConversation = async () => {
+    if (!patient) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from("conversations").select("id")
+      .eq("patient_id", patient.id).eq("medecin_id", user.id).maybeSingle();
+    let convId = (existing as any)?.id;
+    if (!convId) {
+      const { data: inserted } = await supabase
+        .from("conversations")
+        .insert({ patient_id: patient.id, medecin_id: user.id })
+        .select("id").single();
+      convId = (inserted as any)?.id;
+    }
+    if (convId) navigate(`/doctor/messages?conversation=${convId}`);
+  };
+
+  const handleMessageProche = async (procheId: string) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data: existing } = await supabase
+      .from("family_conversations").select("id")
+      .eq("proche_id", procheId).eq("medecin_id", user.id).maybeSingle();
+    let convId = (existing as any)?.id;
+    if (!convId) {
+      const { data: inserted } = await supabase
+        .from("family_conversations")
+        .insert({ proche_id: procheId, medecin_id: user.id })
+        .select("id").single();
+      convId = (inserted as any)?.id;
+    }
+    if (convId) navigate(`/doctor/messages?tab=proches&conversation=${convId}`);
+  };
+
+  // ── Chart data ────────────────────────────────────────────────────────────
+  const chartData = vitalsHistory.map((v) => ({
+    time: format(new Date(v.recorded_at), "HH:mm", { locale: fr }),
+    bpm: v.bpm,
+    spo2: v.spo2,
+    temperature: v.temperature ? Number(v.temperature) : null,
+  }));
+
+  const vitalConfig = {
+    bpm:         { key: "bpm",         color: "#ef4444", label: "BPM",          unit: "bpm",  ref: [60, 100] },
+    spo2:        { key: "spo2",        color: "#3b82f6", label: "SpO₂",         unit: "%",    ref: [95, 100] },
+    temperature: { key: "temperature", color: "#f97316", label: "Température",  unit: "°C",   ref: [36, 37.5] },
+  };
+
+  const vc = vitalConfig[activeVitalTab];
+
+  if (loading) {
+    return (
+      <DashboardLayout role="doctor">
+        <div className="flex items-center justify-center h-96">
+          <Loader className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </DashboardLayout>
+    );
+  }
+
+  if (!patient) return null;
+
+  const initials = `${patient.prenom?.[0] || ""}${patient.nom?.[0] || ""}`.toUpperCase() || "?";
+  const fullName = [patient.prenom, patient.nom].filter(Boolean).join(" ") || "—";
+  const isOnline = device?.actif && device?.dernier_signal
+    ? Date.now() - new Date(device.dernier_signal).getTime() < 5 * 60 * 1000
+    : false;
+
+  return (
+    <DashboardLayout role="doctor">
+      <div className="max-w-7xl space-y-6">
+
+        {/* ── Back + Header ── */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+          <button
+            onClick={() => navigate("/doctor/patients")}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-4 h-4" /> Retour aux patients
+          </button>
+
+          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="relative">
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
+                    {initials}
+                  </div>
+                  <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-card ${isOnline ? "bg-green-500" : "bg-muted-foreground"}`} />
+                </div>
+                <div>
+                  <h1 className="text-2xl font-bold text-foreground">{fullName}</h1>
+                  <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
+                    {patient.date_naissance && <span>{age(patient.date_naissance)} ans</span>}
+                    {patient.sexe && <span>• {patient.sexe}</span>}
+                    {patient.maladies?.[0] && <span>• {patient.maladies[0]}</span>}
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={handleStartConversation}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all"
+                >
+                  <MessageCircle className="w-4 h-4" /> Envoyer un message
+                </button>
+                <StatusBadge status={patient.status as any} size="md" />
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* ── Grid layout ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* ── LEFT COLUMN ── */}
+          <div className="space-y-5">
+
+            {/* Infos personnelles */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
+              <Section title="Informations personnelles" icon={<User className="w-4 h-4" />}>
+                <div className="space-y-2 text-sm">
+                  {patient.telephone && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Phone className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-foreground">{patient.telephone}</span>
+                    </div>
+                  )}
+                  {patient.email && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <FileText className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-foreground truncate">{patient.email}</span>
+                    </div>
+                  )}
+                  {patient.adresse && (
+                    <div className="flex items-start gap-2 text-muted-foreground">
+                      <Home className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                      <span className="text-foreground">{patient.adresse}</span>
+                    </div>
+                  )}
+                  {patient.date_naissance && (
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                      <Clock className="w-3.5 h-3.5 shrink-0" />
+                      <span className="text-foreground">
+                        {format(new Date(patient.date_naissance), "dd MMMM yyyy", { locale: fr })}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Section>
+            </motion.div>
+
+            {/* Antécédents & traitements */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+              <Section title="Dossier médical" icon={<Stethoscope className="w-4 h-4" />}>
+                <div className="space-y-3 text-sm">
+                  {patient.maladies?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5">Maladies</p>
+                      <div className="flex flex-wrap gap-1">
+                        {patient.maladies.map((m, i) => (
+                          <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">{m}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {patient.antecedents && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1">Antécédents</p>
+                      <p className="text-foreground text-xs leading-relaxed">{patient.antecedents}</p>
+                    </div>
+                  )}
+                  {patient.traitements?.length > 0 && (
+                    <div>
+                      <p className="text-xs text-muted-foreground mb-1.5">Traitements</p>
+                      <div className="flex flex-wrap gap-1">
+                        {patient.traitements.map((t, i) => (
+                          <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!patient.maladies?.length && !patient.antecedents && !patient.traitements?.length && (
+                    <p className="text-xs text-muted-foreground">Aucune information renseignée</p>
+                  )}
+                </div>
+              </Section>
+            </motion.div>
+
+            {/* Proches */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
+              <Section title={`Proches (${proches.length})`} icon={<Users className="w-4 h-4" />}>
+                {proches.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aucun proche lié</p>
+                ) : (
+                  <div className="space-y-2">
+                    {proches.map((p) => (
+                      <div key={p.proche_id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/50">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-600 text-xs font-semibold shrink-0">
+                            {`${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?"}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="text-xs font-medium text-foreground truncate">
+                              {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
+                            </p>
+                            {p.telephone && <p className="text-[10px] text-muted-foreground">{p.telephone}</p>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => handleMessageProche(p.proche_id)}
+                          className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors shrink-0"
+                          title="Envoyer un message"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            </motion.div>
+          </div>
+
+          {/* ── MIDDLE + RIGHT COLUMN ── */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Device + latest vitals */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Shield className="w-4 h-4 text-primary" />
+                    <h3 className="text-sm font-semibold text-foreground">Données vitales — Dernière mesure</h3>
+                  </div>
+                  {device ? (
+                    <div className="flex items-center gap-1.5 text-xs">
+                      {isOnline
+                        ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
+                        : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>
+                      }
+                      {device.dernier_signal && (
+                        <span className="text-muted-foreground ml-1">
+                          · {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Aucun appareil</span>
+                  )}
+                </div>
+
+                {latestVital ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <VitalMini icon={<Heart className="w-3.5 h-3.5" />} label="Fréquence cardiaque"
+                      value={latestVital.bpm} unit="bpm"
+                      color={latestVital.bpm && (latestVital.bpm < 60 || latestVital.bpm > 100) ? "text-red-500" : "text-foreground"} />
+                    <VitalMini icon={<Activity className="w-3.5 h-3.5" />} label="SpO₂"
+                      value={latestVital.spo2 ? `${latestVital.spo2}` : null} unit="%"
+                      color={latestVital.spo2 && latestVital.spo2 < 95 ? "text-red-500" : "text-foreground"} />
+                    <VitalMini icon={<Thermometer className="w-3.5 h-3.5" />} label="Température"
+                      value={latestVital.temperature ? Number(latestVital.temperature).toFixed(1) : null} unit="°C"
+                      color={latestVital.temperature && (latestVital.temperature < 36 || latestVital.temperature > 37.5) ? "text-orange-500" : "text-foreground"} />
+                    <VitalMini icon={<Battery className="w-3.5 h-3.5" />} label="Batterie"
+                      value={latestVital.niveau_batterie} unit="%"
+                      color={batteryColor(latestVital.niveau_batterie)} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    {["Fréquence cardiaque", "SpO₂", "Température", "Batterie"].map((l) => (
+                      <div key={l} className="bg-muted/50 rounded-xl p-3 h-20 animate-pulse" />
+                    ))}
+                  </div>
+                )}
+
+                {latestVital?.chute && (
+                  <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-medium">
+                    <AlertTriangle className="w-3.5 h-3.5" /> Chute détectée lors de la dernière mesure
+                  </div>
+                )}
+
+                {latestVital?.latitude && latestVital?.longitude && (
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <MapPin className="w-3 h-3" />
+                    <a
+                      href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`}
+                      target="_blank" rel="noopener noreferrer"
+                      className="hover:text-primary transition-colors"
+                    >
+                      {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
+                    </a>
+                  </div>
+                )}
+              </div>
+            </motion.div>
+
+            {/* ECG live */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+              <LiveECGChart title="Moniteur ECG en direct" />
+            </motion.div>
+
+            {/* Vitals history chart */}
+            {vitalsHistory.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
+                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-primary" />
+                      <h3 className="text-sm font-semibold text-foreground">Historique des constantes</h3>
+                    </div>
+                    <div className="flex gap-1">
+                      {(["bpm", "spo2", "temperature"] as const).map((tab) => (
+                        <button key={tab} onClick={() => setActiveVitalTab(tab)}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            activeVitalTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                          }`}>
+                          {vitalConfig[tab].label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="h-48">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="time" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
+                        <Tooltip
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                          labelStyle={{ color: "hsl(var(--muted-foreground))" }}
+                        />
+                        <ReferenceLine y={vc.ref[0]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
+                        <ReferenceLine y={vc.ref[1]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
+                        <Line type="monotone" dataKey={vc.key} stroke={vc.color} strokeWidth={2}
+                          dot={false} isAnimationActive={false} connectNulls />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1">Lignes de référence : plage normale</p>
+                </div>
+              </motion.div>
+            )}
+
+            {/* Alerts */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+              <Section title={`Alertes récentes (${alerts.length})`} icon={<AlertTriangle className="w-4 h-4" />}>
+                {alerts.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aucune alerte récente</p>
+                ) : (
+                  <div className="space-y-2">
+                    {alerts.map((a) => (
+                      <div key={a.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs ${severityColor[a.severity] || "text-muted-foreground bg-muted border-border"}`}>
+                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">{a.type.replace(/_/g, " ")}</p>
+                          <p className="opacity-80 mt-0.5">{a.message}</p>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className="opacity-70">{formatDistanceToNow(new Date(a.created_at), { addSuffix: true, locale: fr })}</span>
+                          {!a.resolved && <span className="px-1.5 py-0.5 rounded-full bg-current/10 font-medium">Non résolu</span>}
+                        </div>
+                      </div>
+                    ))}
+                    <button
+                      onClick={() => navigate("/doctor/alerts")}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                    >
+                      Voir toutes les alertes <ChevronRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </Section>
+            </motion.div>
+
+            {/* Anomalies */}
+            {anomalies.length > 0 && (
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                <Section title="Anomalies détectées par IA" icon={<Zap className="w-4 h-4" />}>
+                  <div className="space-y-2">
+                    {anomalies.map((a) => (
+                      <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/50 text-xs">
+                        <div>
+                          <p className="font-medium text-foreground">{a.type_anomalie.replace(/_/g, " ")}</p>
+                          <p className="text-muted-foreground mt-0.5">
+                            {formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}
+                          </p>
+                        </div>
+                        {a.score_confiance != null && (
+                          <div className="flex items-center gap-1.5">
+                            <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(a.score_confiance * 40, 100)}%` }} />
+                            </div>
+                            <span className="text-muted-foreground">{a.score_confiance.toFixed(2)}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </Section>
+              </motion.div>
+            )}
+
+            {/* Notes cliniques */}
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+              <Section title="Notes cliniques" icon={<FileText className="w-4 h-4" />}>
+                <textarea
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Ajouter des notes cliniques..."
+                  className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none"
+                />
+                <div className="flex items-center justify-between mt-3">
+                  {notesSaved && (
+                    <span className="flex items-center gap-1 text-xs text-green-500">
+                      <CheckCircle className="w-3.5 h-3.5" /> Sauvegardé
+                    </span>
+                  )}
+                  <button
+                    onClick={handleSaveNotes}
+                    disabled={savingNotes}
+                    className="ml-auto flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
+                  >
+                    {savingNotes ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                    Sauvegarder
+                  </button>
+                </div>
+              </Section>
+            </motion.div>
+
+          </div>
+        </div>
+      </div>
+    </DashboardLayout>
+  );
+};
+
+export default DoctorPatientFiche;

@@ -10,6 +10,7 @@ import Register from "./pages/Register";
 import PatientDashboard from "./pages/PatientDashboard";
 import DoctorDashboard from "./pages/DoctorDashboard";
 import DoctorPatients from "./pages/DoctorPatients";
+import DoctorPatientFiche from "./pages/DoctorPatientFiche";
 import DoctorAlerts from "./pages/DoctorAlerts";
 import DoctorAnalytics from "./pages/DoctorAnalytics";
 import DoctorMessages from "./pages/DoctorMessages";
@@ -17,6 +18,7 @@ import DoctorSettings from "./pages/DoctorSettings";
 import FamilyDashboard from "./pages/FamilyDashboard";
 import FamilyAlerts from "./pages/FamilyAlerts";
 import FamilyParametres from "./pages/FamilyParametres";
+import FamilyMessages from "./pages/FamilyMessages";
 import AdminDashboard from "./pages/AdminDashboard";
 import AdminUsers from "./pages/AdminUsers";
 import AdminDevices from "./pages/AdminDevices";
@@ -105,9 +107,11 @@ const App = () => (
           <Route path="/doctor/messages"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
           <Route path="/doctor/settings"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
           <Route path="/doctor/*"          element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/doctor/patients/:patientId" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatientFiche /></ProtectedRoute>} />
 
           {/* Family */}
           <Route path="/family"            element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+          <Route path="/family/messages"   element={<ProtectedRoute allowedRoles={["proche"]}><FamilyMessages /></ProtectedRoute>} />
           <Route path="/family/alerts"     element={<ProtectedRoute allowedRoles={["proche"]}><FamilyAlerts /></ProtectedRoute>} />
           <Route path="/family/parametres" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyParametres /></ProtectedRoute>} />
           <Route path="/family/*"          element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />

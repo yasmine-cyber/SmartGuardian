@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-import { Search, Loader, Save, CheckCircle, Users, UserPlus, XCircle, MessageCircle } from "lucide-react";
+import { Search, Loader, Save, CheckCircle, Users, UserPlus, XCircle, MessageCircle, FileText } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
 import LiveECGChart from "@/components/LiveECGChart";
@@ -145,7 +145,6 @@ const DoctorPatients = () => {
       .from("patients")
       .update({ notes_medecin: notes, updated_at: new Date().toISOString() })
       .eq("id", selectedPatient.id);
-
     if (!error) {
       setPatients((prev) =>
         prev.map((p) => (p.id === selectedPatient.id ? { ...p, notes_medecin: notes } : p))
@@ -233,7 +232,7 @@ const DoctorPatients = () => {
           </p>
         </motion.div>
 
-        {/* Section: Mes patients | Demandes */}
+        {/* Section tabs */}
         <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit">
           <button
             onClick={() => setSection("patients")}
@@ -268,212 +267,213 @@ const DoctorPatients = () => {
               exit={{ opacity: 0 }}
               className="grid grid-cols-1 lg:grid-cols-3 gap-6"
             >
-          {/* List column */}
-          <div className={`${selectedPatient ? "lg:col-span-1" : "lg:col-span-3"} space-y-4`}>
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Rechercher un patient..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-card border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
+              {/* List column */}
+              <div className={`${selectedPatient ? "lg:col-span-1" : "lg:col-span-3"} space-y-4`}>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un patient..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full bg-card border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
+                  />
+                </div>
 
-            <div className="flex gap-2 flex-wrap">
-              {filterTabs.map((tab) => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveFilter(tab)}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
-                    activeFilter === tab
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-muted-foreground hover:text-foreground"
-                  }`}
-                >
-                  {tab}
-                </button>
-              ))}
-            </div>
-
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader className="w-6 h-6 text-primary animate-spin" />
-              </div>
-            ) : filtered.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground text-sm">
-                Aucun patient trouvé
-              </div>
-            ) : (
-              <div
-                className={`${
-                  selectedPatient
-                    ? "space-y-2"
-                    : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                }`}
-              >
-                {filtered.map((p) => {
-                  const initials =
-                    `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?";
-                  return (
-                    <motion.button
-                      key={p.id}
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      onClick={() => setSelectedPatient(p)}
-                      className={`w-full bg-card border rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:shadow-md ${
-                        selectedPatient?.id === p.id
-                          ? "border-primary ring-1 ring-primary/20"
-                          : "border-border"
+                <div className="flex gap-2 flex-wrap">
+                  {filterTabs.map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => setActiveFilter(tab)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                        activeFilter === tab
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0">
-                        {initials}
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {loading ? (
+                  <div className="flex items-center justify-center py-12">
+                    <Loader className="w-6 h-6 text-primary animate-spin" />
+                  </div>
+                ) : filtered.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground text-sm">
+                    Aucun patient trouvé
+                  </div>
+                ) : (
+                  <div
+                    className={`${
+                      selectedPatient
+                        ? "space-y-2"
+                        : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+                    }`}
+                  >
+                    {filtered.map((p) => {
+                      const initials =
+                        `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?";
+                      return (
+                        <motion.button
+                          key={p.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          onClick={() => setSelectedPatient(p)}
+                          className={`w-full bg-card border rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:shadow-md ${
+                            selectedPatient?.id === p.id
+                              ? "border-primary ring-1 ring-primary/20"
+                              : "border-border"
+                          }`}
+                        >
+                          <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0">
+                            {initials}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-card-foreground">
+                              {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
+                            </p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {age(p.date_naissance)} ans • {p.maladies?.[0] || "—"}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartConversation(p.id, e)}
+                              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                              title="Envoyer un message"
+                            >
+                              <MessageCircle className="w-4 h-4" />
+                            </button>
+                            {/* ── Voir la fiche ── */}
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                navigate(`/doctor/patients/${p.id}`);
+                              }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title="Voir la fiche complète"
+                            >
+                              <FileText className="w-4 h-4" />
+                            </button>
+                            <StatusBadge status={p.status as any} size="sm" />
+                          </div>
+                        </motion.button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Patient detail panel */}
+              {selectedPatient && (
+                <motion.div
+                  initial={{ opacity: 0, x: 20 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  className="lg:col-span-2 space-y-4"
+                >
+                  <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
+                          {`${selectedPatient.prenom?.[0] || ""}${selectedPatient.nom?.[0] || ""}`.toUpperCase()}
+                        </div>
+                        <div>
+                          <h2 className="text-lg font-bold text-card-foreground">
+                            {[selectedPatient.prenom, selectedPatient.nom].filter(Boolean).join(" ")}
+                          </h2>
+                          <p className="text-sm text-muted-foreground">
+                            {age(selectedPatient.date_naissance)} ans •{" "}
+                            {selectedPatient.maladies?.[0] || "—"}
+                          </p>
+                        </div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-card-foreground">
-                          {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
-                        </p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {age(p.date_naissance)} ans • {p.maladies?.[0] || "—"}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2">
+                        {/* ── Voir la fiche complète ── */}
                         <button
                           type="button"
-                          onClick={(e) => handleStartConversation(p.id, e)}
-                          className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-                          title="Envoyer un message"
+                          onClick={() => navigate(`/doctor/patients/${selectedPatient.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                         >
-                          <MessageCircle className="w-4 h-4" />
+                          <FileText className="w-4 h-4" /> Fiche complète
                         </button>
-                        <StatusBadge status={p.status as any} size="sm" />
+                        <button
+                          type="button"
+                          onClick={() => handleStartConversation(selectedPatient.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                        >
+                          <MessageCircle className="w-4 h-4" /> Envoyer un message
+                        </button>
+                        <StatusBadge status={selectedPatient.status as any} size="md" />
                       </div>
-                    </motion.button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          {/* Patient detail panel */}
-          {selectedPatient && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="lg:col-span-2 space-y-4"
-            >
-              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-lg">
-                      {`${selectedPatient.prenom?.[0] || ""}${selectedPatient.nom?.[0] || ""}`.toUpperCase()}
                     </div>
-                    <div>
-                      <h2 className="text-lg font-bold text-card-foreground">
-                        {[selectedPatient.prenom, selectedPatient.nom]
-                          .filter(Boolean)
-                          .join(" ")}
-                      </h2>
-                      <p className="text-sm text-muted-foreground">
-                        {age(selectedPatient.date_naissance)} ans •{" "}
-                        {selectedPatient.maladies?.[0] || "—"}
-                      </p>
+
+                    <div className="grid grid-cols-2 gap-3 text-sm">
+                      <div className="bg-muted/50 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">Téléphone</p>
+                        <p className="font-medium text-foreground">{selectedPatient.telephone || "—"}</p>
+                      </div>
+                      <div className="bg-muted/50 rounded-xl p-3">
+                        <p className="text-xs text-muted-foreground mb-1">Adresse</p>
+                        <p className="font-medium text-foreground truncate">{selectedPatient.adresse || "—"}</p>
+                      </div>
+                      {selectedPatient.maladies?.length > 0 && (
+                        <div className="bg-muted/50 rounded-xl p-3 col-span-2">
+                          <p className="text-xs text-muted-foreground mb-2">Maladies</p>
+                          <div className="flex flex-wrap gap-1">
+                            {selectedPatient.maladies.map((m, i) => (
+                              <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full">{m}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {selectedPatient.antecedents && (
+                        <div className="bg-muted/50 rounded-xl p-3 col-span-2">
+                          <p className="text-xs text-muted-foreground mb-1">Antécédents</p>
+                          <p className="text-sm text-foreground">{selectedPatient.antecedents}</p>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  <LiveECGChart />
+
+                  <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-card-foreground">Notes Cliniques</h3>
+                      {notesSaved && (
+                        <span className="flex items-center gap-1 text-xs text-green-500">
+                          <CheckCircle className="w-3.5 h-3.5" /> Sauvegardé
+                        </span>
+                      )}
+                    </div>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Ajouter des notes cliniques..."
+                      className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
+                    />
                     <button
-                      type="button"
-                      onClick={() => handleStartConversation(selectedPatient.id)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                      onClick={handleSaveNotes}
+                      disabled={savingNotes}
+                      className="mt-3 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
                     >
-                      <MessageCircle className="w-4 h-4" /> Envoyer un message
+                      {savingNotes ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Sauvegarder
                     </button>
-                    <StatusBadge status={selectedPatient.status as any} size="md" />
                   </div>
-                </div>
 
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  <div className="bg-muted/50 rounded-xl p-3">
-                    <p className="text-xs text-muted-foreground mb-1">Téléphone</p>
-                    <p className="font-medium text-foreground">
-                      {selectedPatient.telephone || "—"}
-                    </p>
-                  </div>
-                  <div className="bg-muted/50 rounded-xl p-3">
-                    <p className="text-xs text-muted-foreground mb-1">Adresse</p>
-                    <p className="font-medium text-foreground truncate">
-                      {selectedPatient.adresse || "—"}
-                    </p>
-                  </div>
-                  {selectedPatient.maladies?.length > 0 && (
-                    <div className="bg-muted/50 rounded-xl p-3 col-span-2">
-                      <p className="text-xs text-muted-foreground mb-2">Maladies</p>
-                      <div className="flex flex-wrap gap-1">
-                        {selectedPatient.maladies.map((m, i) => (
-                          <span
-                            key={i}
-                            className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full"
-                          >
-                            {m}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {selectedPatient.antecedents && (
-                    <div className="bg-muted/50 rounded-xl p-3 col-span-2">
-                      <p className="text-xs text-muted-foreground mb-1">Antécédents</p>
-                      <p className="text-sm text-foreground">
-                        {selectedPatient.antecedents}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <LiveECGChart />
-
-              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-semibold text-card-foreground">
-                    Notes Cliniques
-                  </h3>
-                  {notesSaved && (
-                    <span className="flex items-center gap-1 text-xs text-green-500">
-                      <CheckCircle className="w-3.5 h-3.5" /> Sauvegardé
-                    </span>
-                  )}
-                </div>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ajouter des notes cliniques..."
-                  className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[100px] resize-none"
-                />
-                <button
-                  onClick={handleSaveNotes}
-                  disabled={savingNotes}
-                  className="mt-3 flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-                >
-                  {savingNotes ? (
-                    <Loader className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <Save className="w-3.5 h-3.5" />
-                  )}
-                  Sauvegarder
-                </button>
-              </div>
-
-              <button
-                onClick={() => setSelectedPatient(null)}
-                className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-              >
-                ← Retour à la liste
-              </button>
-            </motion.div>
-          )}
+                  <button
+                    onClick={() => setSelectedPatient(null)}
+                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    ← Retour à la liste
+                  </button>
+                </motion.div>
+              )}
             </motion.div>
           )}
 
@@ -524,12 +524,7 @@ const DoctorPatients = () => {
                           {maladies.length > 0 && (
                             <div className="flex flex-wrap gap-1 pt-0.5">
                               {maladies.map((m, i) => (
-                                <span
-                                  key={i}
-                                  className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20"
-                                >
-                                  {m}
-                                </span>
+                                <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">{m}</span>
                               ))}
                             </div>
                           )}
