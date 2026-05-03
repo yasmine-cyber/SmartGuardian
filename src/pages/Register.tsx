@@ -1,27 +1,31 @@
-import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Heart, Mail, Lock, User, ArrowRight, ArrowLeft, Check, AlertCircle, Loader } from "lucide-react";
+import {
+  Heart, Mail, Lock, User, ArrowRight, ArrowLeft,
+  Check, AlertCircle, Loader, CreditCard, Clock,
+} from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
-const steps = ["Compte", "Détails", "Confirmé"];
+const PATIENT_STEPS = ["Compte", "Détails", "Email"];
+const PROCHE_STEPS  = ["Compte", "Détails", "Confirmé"];
 
 const maladiesRef = [
-  { id: "1", nom: "Hypertension artérielle", categorie: "Cardiovasculaire" },
-  { id: "2", nom: "Insuffisance cardiaque", categorie: "Cardiovasculaire" },
-  { id: "3", nom: "Arythmie cardiaque", categorie: "Cardiovasculaire" },
-  { id: "4", nom: "Fibrillation auriculaire", categorie: "Cardiovasculaire" },
-  { id: "5", nom: "Angine de poitrine", categorie: "Cardiovasculaire" },
-  { id: "6", nom: "Diabète de type 1", categorie: "Métabolique" },
-  { id: "7", nom: "Diabète de type 2", categorie: "Métabolique" },
-  { id: "8", nom: "Obésité", categorie: "Métabolique" },
-  { id: "9", nom: "Insuffisance respiratoire", categorie: "Respiratoire" },
-  { id: "10", nom: "Apnée du sommeil", categorie: "Respiratoire" },
-  { id: "11", nom: "Épilepsie", categorie: "Neurologique" },
-  { id: "12", nom: "Maladie de Parkinson", categorie: "Neurologique" },
-  { id: "13", nom: "Alzheimer", categorie: "Neurologique" },
-  { id: "14", nom: "Insuffisance rénale", categorie: "Rénale" },
-  { id: "15", nom: "Autre", categorie: "Autre" },
+  { id: "1",  nom: "Hypertension artérielle",  categorie: "Cardiovasculaire" },
+  { id: "2",  nom: "Insuffisance cardiaque",    categorie: "Cardiovasculaire" },
+  { id: "3",  nom: "Arythmie cardiaque",        categorie: "Cardiovasculaire" },
+  { id: "4",  nom: "Fibrillation auriculaire",  categorie: "Cardiovasculaire" },
+  { id: "5",  nom: "Angine de poitrine",        categorie: "Cardiovasculaire" },
+  { id: "6",  nom: "Diabète de type 1",         categorie: "Métabolique" },
+  { id: "7",  nom: "Diabète de type 2",         categorie: "Métabolique" },
+  { id: "8",  nom: "Obésité",                   categorie: "Métabolique" },
+  { id: "9",  nom: "Insuffisance respiratoire", categorie: "Respiratoire" },
+  { id: "10", nom: "Apnée du sommeil",          categorie: "Respiratoire" },
+  { id: "11", nom: "Épilepsie",                 categorie: "Neurologique" },
+  { id: "12", nom: "Maladie de Parkinson",      categorie: "Neurologique" },
+  { id: "13", nom: "Alzheimer",                 categorie: "Neurologique" },
+  { id: "14", nom: "Insuffisance rénale",       categorie: "Rénale" },
+  { id: "15", nom: "Autre",                     categorie: "Autre" },
 ];
 
 const GoogleIcon = () => (
@@ -34,21 +38,18 @@ const GoogleIcon = () => (
 );
 
 interface FieldErrors {
-  prenom?: string;
-  nom?: string;
-  email?: string;
-  password?: string;
-  telephone?: string;
-  dateNaissance?: string;
-  maladies?: string;
+  prenom?: string; nom?: string; email?: string; password?: string;
+  telephone?: string; dateNaissance?: string; maladies?: string;
 }
 
 const Register = () => {
+  const [searchParams] = useSearchParams();
   const [step, setStep] = useState(0);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
+  const [registeredEmail, setRegisteredEmail] = useState("");
   const navigate = useNavigate();
 
   const [email, setEmail] = useState("");
@@ -61,83 +62,65 @@ const Register = () => {
   const [maladies, setMaladies] = useState<string[]>([]);
   const [autreMaladie, setAutreMaladie] = useState("");
 
+  useEffect(() => {
+    if (searchParams.get("payment") === "cancelled")
+      setError("Paiement annulé. Connectez-vous pour réessayer.");
+  }, [searchParams]);
+
+  const steps = role === "patient" ? PATIENT_STEPS : PROCHE_STEPS;
+  const isEmailConfirmStep = role === "patient" && step === 2;
+  const isConfirmedStep    = role === "proche"  && step === 2;
+
   const handleGoogleRegister = async () => {
-    setGoogleLoading(true);
-    setError("");
+    setGoogleLoading(true); setError("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-    if (error) {
-      setError(error.message);
-      setGoogleLoading(false);
-    }
+    if (error) { setError(error.message); setGoogleLoading(false); }
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setFieldErrors({});
+    setError(""); setFieldErrors({});
 
     const newErrors: FieldErrors = {};
-
     const phoneDigits = telephone.replace(/\D/g, "");
-    if (!telephone.trim()) {
-      newErrors.telephone = "Le numéro de téléphone est obligatoire.";
-    } else if (phoneDigits.length !== 8) {
-      newErrors.telephone = "Le numéro doit contenir exactement 8 chiffres.";
-    }
+    if (!telephone.trim()) newErrors.telephone = "Le numéro de téléphone est obligatoire.";
+    else if (phoneDigits.length !== 8) newErrors.telephone = "Le numéro doit contenir exactement 8 chiffres.";
 
-    // ✅ Validations spécifiques patient uniquement
     if (role === "patient") {
-      const today = new Date();
-      today.setHours(23, 59, 59, 999);
+      const today = new Date(); today.setHours(23, 59, 59, 999);
       const minDate = new Date(today.getFullYear() - 120, 0, 1);
-      if (!dateNaissance) {
-        newErrors.dateNaissance = "La date de naissance est obligatoire.";
-      } else {
+      if (!dateNaissance) newErrors.dateNaissance = "La date de naissance est obligatoire.";
+      else {
         const birth = new Date(dateNaissance);
-        if (birth > today) {
-          newErrors.dateNaissance = "La date ne peut pas être dans le futur.";
-        } else if (birth < minDate) {
-          newErrors.dateNaissance = "Date invalide.";
-        }
+        if (birth > today) newErrors.dateNaissance = "La date ne peut pas être dans le futur.";
+        else if (birth < minDate) newErrors.dateNaissance = "Date invalide.";
       }
-      if (maladies.length === 0) {
-        newErrors.maladies = "Sélectionnez au moins une maladie.";
-      } else if (maladies.includes("Autre") && !autreMaladie.trim()) {
+      if (maladies.length === 0) newErrors.maladies = "Sélectionnez au moins une maladie.";
+      else if (maladies.includes("Autre") && !autreMaladie.trim())
         newErrors.maladies = "Précisez la maladie pour le choix \"Autre\".";
-      }
     }
 
-    if (Object.keys(newErrors).length > 0) {
-      setFieldErrors(newErrors);
-      return;
-    }
+    if (Object.keys(newErrors).length > 0) { setFieldErrors(newErrors); return; }
 
-    const maladiesToSave =
-      role === "patient"
-        ? maladies.map((m) =>
-            m === "Autre" && autreMaladie.trim() ? `Autre: ${autreMaladie.trim()}` : m
-          )
-        : null;
+    const maladiesToSave = role === "patient"
+      ? maladies.map((m) => m === "Autre" && autreMaladie.trim() ? `Autre: ${autreMaladie.trim()}` : m)
+      : null;
 
     setLoading(true);
-
     try {
-      // ✅ FIX: envoyer prénom + nom ensemble dans "nom"
-      // car le trigger handle_new_user lit "nom" comme nom complet
-      // et le split automatiquement en prenom + nom
+      // ✅ Toutes les données dans user_metadata → lues par le trigger handle_new_user
+      // Aucun insert manuel : pas de session disponible avant confirmation email
       const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: {
           data: {
             role,
-            nom: `${prenom.trim()} ${nom.trim()}`, // ✅ trigger split automatiquement
-            telephone: telephone.trim(),             // ✅ important pour AuthCallback
+            nom: `${prenom.trim()} ${nom.trim()}`,
+            telephone: telephone.trim(),
             date_naissance: role === "patient" ? dateNaissance || null : null,
             maladies: maladiesToSave,
           },
@@ -145,39 +128,21 @@ const Register = () => {
       });
 
       if (signUpError) {
-        if (signUpError.code === "over_email_send_rate_limit") {
+        if (signUpError.code === "over_email_send_rate_limit")
           setError("Trop de tentatives. Veuillez réessayer dans une heure.");
-        } else {
-          setError(`Erreur: ${signUpError.message}`);
-        }
-        setLoading(false);
+        else setError(`Erreur: ${signUpError.message}`);
         return;
       }
 
-      const user = data.user;
-      if (!user) {
+      if (!data.user) {
         setError("Inscription réussie, mais impossible de récupérer l'utilisateur.");
-        setLoading(false);
         return;
       }
 
-      // ✅ FIX: NE PAS insérer dans utilisateurs manuellement
-      // le trigger handle_new_user s'en occupe automatiquement
-      // Double insert = conflit et données partielles
-
-      // ✅ Seulement l'insert patients pour le rôle patient
-      if (role === "patient") {
-        // Attendre un peu que le trigger finisse
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-        await supabase.from("patients").insert({
-          user_id: user.id,
-          date_naissance: dateNaissance || null,
-          maladies: maladiesToSave || [],
-        });
-      }
-
+      // ✅ Le trigger handle_new_user créera utilisateurs + patients automatiquement
+      setRegisteredEmail(email);
       setStep(2);
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de l'inscription");
     } finally {
@@ -185,17 +150,12 @@ const Register = () => {
     }
   };
 
-  const handleComplete = () => navigate("/login");
-
   const canProceedStep0 = email && password && prenom.trim() && nom.trim() && password.length >= 6;
-
-  // ✅ canProceedStep1 adapté selon le rôle
   const canProceedStep1 =
     telephone &&
     (role === "proche"
       ? true
-      : dateNaissance &&
-        maladies.length > 0 &&
+      : dateNaissance && maladies.length > 0 &&
         (!maladies.includes("Autre") || autreMaladie.trim().length > 0));
 
   return (
@@ -205,12 +165,15 @@ const Register = () => {
         <div className="relative z-10 text-center">
           <Heart className="w-16 h-16 text-primary mx-auto mb-6 animate-heartbeat" />
           <h2 className="text-3xl font-bold text-foreground mb-3">SmartGuardian</h2>
-          <p className="text-muted-foreground text-lg max-w-sm">Créez votre compte pour commencer le suivi intelligent de votre santé</p>
+          <p className="text-muted-foreground text-lg max-w-sm">
+            Créez votre compte pour commencer le suivi intelligent de votre santé
+          </p>
         </div>
       </div>
 
       <div className="flex-1 flex items-center justify-center p-6 bg-background">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+
           <div className="lg:hidden text-center mb-8">
             <Link to="/" className="inline-flex items-center gap-2">
               <Heart className="w-8 h-8 text-primary animate-heartbeat" />
@@ -219,11 +182,8 @@ const Register = () => {
           </div>
 
           <h1 className="text-2xl font-bold text-foreground mb-1">Créer un compte</h1>
-          <p className="text-muted-foreground text-sm mb-6">
-            Inscription {step === 2 ? "terminée" : "en " + (step + 1) + " étapes"}
-          </p>
+          <p className="text-muted-foreground text-sm mb-6">Étape {step + 1} sur {steps.length}</p>
 
-          {/* Step indicator */}
           <div className="flex items-center justify-center gap-2 mb-6">
             {steps.map((s, i) => (
               <div key={s} className="flex items-center gap-2">
@@ -232,15 +192,12 @@ const Register = () => {
                 }`}>
                   {i < step ? <Check className="w-4 h-4" /> : i + 1}
                 </div>
-                <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>
-                  {s}
-                </span>
-                {i < 2 && <div className={`w-6 h-0.5 ${i < step ? "bg-primary" : "bg-border"}`} />}
+                <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
+                {i < steps.length - 1 && <div className={`w-6 h-0.5 ${i < step ? "bg-primary" : "bg-border"}`} />}
               </div>
             ))}
           </div>
 
-          {/* Google button */}
           {step === 0 && (
             <>
               <button onClick={handleGoogleRegister} disabled={googleLoading}
@@ -265,7 +222,7 @@ const Register = () => {
 
           <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
 
-            {/* STEP 0 — Compte */}
+            {/* ── STEP 0 — Compte ── */}
             {step === 0 && (
               <motion.form
                 onSubmit={(e) => {
@@ -273,10 +230,9 @@ const Register = () => {
                   const newErrors: FieldErrors = {};
                   if (!prenom.trim()) newErrors.prenom = "Le prénom est obligatoire.";
                   if (!nom.trim()) newErrors.nom = "Le nom est obligatoire.";
-                  const trimmedEmail = email.trim();
                   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-                  if (!trimmedEmail) newErrors.email = "L'adresse e-mail est obligatoire.";
-                  else if (!emailRegex.test(trimmedEmail)) newErrors.email = "Adresse e-mail invalide.";
+                  if (!email.trim()) newErrors.email = "L'adresse e-mail est obligatoire.";
+                  else if (!emailRegex.test(email.trim())) newErrors.email = "Adresse e-mail invalide.";
                   if (!password.trim()) newErrors.password = "Le mot de passe est obligatoire.";
                   else if (password.length < 6) newErrors.password = "Minimum 6 caractères.";
                   setFieldErrors(newErrors);
@@ -286,15 +242,10 @@ const Register = () => {
               >
                 <h3 className="text-lg font-semibold text-card-foreground mb-4">Choisissez votre rôle</h3>
                 <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[
-                    { id: "patient", label: "Patient", icon: "👤" },
-                    { id: "proche", label: "Aidant", icon: "👨‍👩‍👧" },
-                  ].map((r) => (
+                  {[{ id: "patient", label: "Patient", icon: "👤" }, { id: "proche", label: "Aidant", icon: "👨‍👩‍👧" }].map((r) => (
                     <button key={r.id} type="button" onClick={() => setRole(r.id)}
                       className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
-                        role === r.id
-                          ? "border-primary/50 bg-primary/5 text-foreground"
-                          : "border-border text-muted-foreground hover:border-primary/20"
+                        role === r.id ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/20"
                       }`}>
                       <span className="text-2xl">{r.icon}</span>
                       <span className="text-sm font-medium">{r.label}</span>
@@ -306,8 +257,7 @@ const Register = () => {
                   <div>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Prénom" value={prenom}
-                        onChange={(e) => setPrenom(e.target.value)}
+                      <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)}
                         className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     {fieldErrors.prenom && <p className="text-xs text-destructive mt-1">{fieldErrors.prenom}</p>}
@@ -315,8 +265,7 @@ const Register = () => {
                   <div>
                     <div className="relative">
                       <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Nom" value={nom}
-                        onChange={(e) => setNom(e.target.value)}
+                      <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)}
                         className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     {fieldErrors.nom && <p className="text-xs text-destructive mt-1">{fieldErrors.nom}</p>}
@@ -325,16 +274,14 @@ const Register = () => {
 
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="email" placeholder="Adresse e-mail" value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                  <input type="email" placeholder="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)}
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
                 {fieldErrors.email && <p className="text-xs text-destructive">{fieldErrors.email}</p>}
 
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                  <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password} onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                 </div>
                 {fieldErrors.password && <p className="text-xs text-destructive">{fieldErrors.password}</p>}
@@ -346,36 +293,30 @@ const Register = () => {
               </motion.form>
             )}
 
-            {/* STEP 1 — Détails */}
+            {/* ── STEP 1 — Détails ── */}
             {step === 1 && (
               <motion.form onSubmit={handleSignUp} className="space-y-4">
                 <h3 className="text-lg font-semibold text-card-foreground mb-4">
                   {role === "proche" ? "Informations Aidant" : "Informations Patient"}
                 </h3>
                 <div className="space-y-4">
-
-                  {/* Téléphone — tous les rôles */}
                   <div className="relative">
                     <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                    <input type="tel" placeholder="Numéro de téléphone" value={telephone}
-                      onChange={(e) => setTelephone(e.target.value)}
+                    <input type="tel" placeholder="Numéro de téléphone" value={telephone} onChange={(e) => setTelephone(e.target.value)}
                       className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
                   </div>
                   {fieldErrors.telephone && <p className="text-xs text-destructive">{fieldErrors.telephone}</p>}
 
-                  {/* ✅ Date naissance — patient uniquement */}
                   {role === "patient" && (
                     <>
                       <div className="relative">
                         <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                        <input type="date" value={dateNaissance}
-                          max={new Date().toISOString().split("T")[0]}
+                        <input type="date" value={dateNaissance} max={new Date().toISOString().split("T")[0]}
                           onChange={(e) => setDateNaissance(e.target.value)}
                           className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all" />
                       </div>
                       {fieldErrors.dateNaissance && <p className="text-xs text-destructive">{fieldErrors.dateNaissance}</p>}
 
-                      {/* ✅ Maladies — patient uniquement */}
                       <div>
                         <p className="text-base font-semibold text-card-foreground mb-3">Maladies suivies</p>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto bg-muted/40 rounded-2xl p-4 border border-border/60">
@@ -384,9 +325,7 @@ const Register = () => {
                             return (
                               <label key={m.id} className="flex items-start gap-3 text-sm text-foreground cursor-pointer rounded-xl p-2 hover:bg-muted/40 transition-colors">
                                 <input type="checkbox" checked={checked}
-                                  onChange={() => setMaladies((prev) =>
-                                    checked ? prev.filter((x) => x !== m.nom) : [...prev, m.nom]
-                                  )}
+                                  onChange={() => setMaladies((prev) => checked ? prev.filter((x) => x !== m.nom) : [...prev, m.nom])}
                                   className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
                                 <span className="leading-snug">{m.nom}</span>
                               </label>
@@ -405,7 +344,6 @@ const Register = () => {
                     </>
                   )}
 
-                  {/* ✅ Message informatif pour le proche */}
                   {role === "proche" && (
                     <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
                       <p className="text-sm text-foreground font-medium mb-1">👨‍👩‍👧 Compte Aidant</p>
@@ -424,16 +362,62 @@ const Register = () => {
                   <button type="submit" disabled={!canProceedStep1 || loading}
                     className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage disabled:opacity-50 disabled:cursor-not-allowed">
                     {loading
-                      ? <><Loader className="w-4 h-4 animate-spin" /> Création...</>
-                      : <>S'inscrire <ArrowRight className="w-4 h-4" /></>
+                      ? <><Loader className="w-4 h-4 animate-spin" /> Création du compte...</>
+                      : <>Créer mon compte <ArrowRight className="w-4 h-4" /></>
                     }
                   </button>
                 </div>
               </motion.form>
             )}
 
-            {/* STEP 2 — Confirmé */}
-            {step === 2 && (
+            {/* ── STEP 2 patient — Vérification email ── */}
+            {isEmailConfirmStep && (
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 space-y-5">
+                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
+                  <Mail className="w-8 h-8 text-primary" />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold text-card-foreground mb-2">Vérifiez votre email</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Un lien de confirmation a été envoyé à{" "}
+                    <span className="font-semibold text-foreground">{registeredEmail}</span>.
+                  </p>
+                </div>
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl text-left space-y-3">
+                  <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Prochaines étapes</p>
+                  {[
+                    { icon: Mail,       text: "Cliquez sur le lien dans votre email" },
+                    { icon: Check,      text: "Votre compte est activé automatiquement" },
+                    { icon: CreditCard, text: "Connectez-vous → commandez votre bracelet" },
+                    { icon: Clock,      text: "L'admin valide et prépare la livraison" },
+                  ].map((item, i) => (
+                    <div key={i} className="flex items-center gap-3 text-xs text-muted-foreground">
+                      <item.icon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
+                      <span>{item.text}</span>
+                    </div>
+                  ))}
+                </div>
+                <button onClick={() => navigate("/login")}
+                  className="w-full bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage">
+                  Aller à la Connexion
+                </button>
+                <p className="text-xs text-muted-foreground">
+                  Pas reçu ?{" "}
+                  <button
+                    onClick={async () => {
+                      const { error } = await supabase.auth.resend({ type: "signup", email: registeredEmail });
+                      if (error) setError("Impossible de renvoyer. Attendez quelques minutes.");
+                    }}
+                    className="text-primary hover:underline font-medium"
+                  >
+                    Renvoyer l'email
+                  </button>
+                </p>
+              </motion.div>
+            )}
+
+            {/* ── STEP 2 proche — Confirmé ── */}
+            {isConfirmedStep && (
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8">
                 <div className="w-16 h-16 rounded-full bg-safe/10 flex items-center justify-center mx-auto mb-4">
                   <Check className="w-8 h-8 text-safe" />
@@ -442,15 +426,16 @@ const Register = () => {
                 <p className="text-muted-foreground text-sm mb-6">
                   Vérifiez votre email pour confirmer votre compte, puis connectez-vous.
                 </p>
-                <button onClick={handleComplete}
+                <button onClick={() => navigate("/login")}
                   className="bg-primary text-primary-foreground px-8 py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage">
                   Aller à la Connexion
                 </button>
               </motion.div>
             )}
+
           </div>
 
-          {step !== 2 && (
+          {step < 2 && (
             <p className="text-center text-xs text-muted-foreground mt-6">
               Déjà un compte ?{" "}
               <Link to="/login" className="text-primary hover:underline font-medium">Se connecter</Link>

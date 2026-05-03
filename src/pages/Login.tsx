@@ -29,44 +29,60 @@ const Login = () => {
     setError("");
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
-    if (error) {
-      setError(error.message);
-      setGoogleLoading(false);
+    if (error) { setError(error.message); setGoogleLoading(false); }
+  };
+
+  // ── Helper : décide où rediriger un patient après login ──
+  const redirectPatient = async (userId: string) => {
+    // 1. Récupérer patient_id
+    const { data: patientRow } = await supabase
+      .from("patients")
+      .select("id")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (!patientRow) {
+      // Pas encore de ligne patient (rare) → checkout
+      navigate("/checkout");
+      return;
     }
+
+    // 2. Vérifier si une demande payée existe
+    const { data: paidRequest } = await supabase
+      .from("device_requests")
+      .select("id, status")
+      .eq("patient_id", patientRow.id)
+      .eq("payment_status", "paid")
+      .maybeSingle();
+
+    if (!paidRequest) {
+      // Pas encore payé → checkout
+      navigate("/checkout");
+      return;
+    }
+
+    // 3. Payé mais en attente d'approbation → dashboard
+    // (le dashboard patient gère l'état "en attente" lui-même)
+    navigate("/patient");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError("");
-    setEmailHint("");
-    setPasswordHint("");
+    setError(""); setEmailHint(""); setPasswordHint("");
 
     const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
     let hasError = false;
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-    if (!trimmedEmail) {
-      setEmailHint("L'adresse e-mail est obligatoire.");
-      hasError = true;
-    } else if (!emailRegex.test(trimmedEmail)) {
-      setEmailHint("Adresse e-mail invalide. Exemple : nom@domaine.com");
-      hasError = true;
-    }
-
-    if (!trimmedPassword) {
-      setPasswordHint("Le mot de passe est obligatoire.");
-      hasError = true;
-    }
-
+    if (!trimmedEmail) { setEmailHint("L'adresse e-mail est obligatoire."); hasError = true; }
+    else if (!emailRegex.test(trimmedEmail)) { setEmailHint("Adresse e-mail invalide."); hasError = true; }
+    if (!trimmedPassword) { setPasswordHint("Le mot de passe est obligatoire."); hasError = true; }
     if (hasError) return;
 
     setLoading(true);
-
     try {
       const { data, error: signInError } = await supabase.auth.signInWithPassword({
         email: trimmedEmail,
@@ -89,26 +105,31 @@ const Login = () => {
         return;
       }
 
-      const { data: userRole, error: roleError } = await supabase
+      // Récupérer le rôle
+      const { data: userProfile, error: roleError } = await supabase
         .from("utilisateurs")
         .select("role")
         .eq("id", data.user.id)
         .single();
 
-      if (roleError) {
-        setError("Impossible de récupérer votre rôle");
+      if (roleError || !userProfile) {
+        setError("Impossible de récupérer votre profil.");
         setLoading(false);
         return;
       }
 
-      const dashboardMap: { [key: string]: string } = {
-        patient: "/patient",
-        medecin: "/doctor",
-        proche: "/family",
-        admin: "/admin",
-      };
-
-      navigate(dashboardMap[userRole?.role] || "/patient");
+      // ── Redirection selon rôle ──
+      if (userProfile.role === "patient") {
+        // Vérifier le paiement avant d'aller au dashboard
+        await redirectPatient(data.user.id);
+      } else {
+        const dashboardMap: Record<string, string> = {
+          medecin: "/doctor",
+          proche:  "/family",
+          admin:   "/admin",
+        };
+        navigate(dashboardMap[userProfile.role] || "/");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de la connexion");
     } finally {
@@ -126,13 +147,20 @@ const Login = () => {
         <div className="relative z-10 text-center">
           <Heart className="w-16 h-16 text-primary mx-auto mb-6 animate-heartbeat" />
           <h2 className="text-3xl font-bold text-foreground mb-3">SmartGuardian</h2>
-          <p className="text-muted-foreground text-lg max-w-sm">Votre système de télémédecine autonome par intelligence artificielle</p>
+          <p className="text-muted-foreground text-lg max-w-sm">
+            Votre système de télémédecine autonome par intelligence artificielle
+          </p>
         </div>
       </div>
 
       {/* Right — form */}
       <div className="flex-1 flex items-center justify-center p-6 bg-background">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="w-full max-w-md">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="w-full max-w-md"
+        >
           <div className="lg:hidden text-center mb-8">
             <Link to="/" className="inline-flex items-center gap-2">
               <Heart className="w-8 h-8 text-primary animate-heartbeat" />
@@ -143,7 +171,6 @@ const Login = () => {
           <h1 className="text-2xl font-bold text-foreground mb-1">Bienvenue</h1>
           <p className="text-muted-foreground text-sm mb-8">Connectez-vous à votre compte</p>
 
-          {/* Error message */}
           {error && (
             <div className="mb-4 p-3 bg-destructive/10 border border-destructive/50 rounded-lg flex items-start gap-2">
               <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
@@ -151,21 +178,15 @@ const Login = () => {
             </div>
           )}
 
-          {/* Google button */}
           <button
             onClick={handleGoogleLogin}
             disabled={googleLoading || loading}
             className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-background border border-border rounded-xl text-sm font-medium text-foreground hover:bg-muted/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-4"
           >
-            {googleLoading ? (
-              <Loader className="w-4 h-4 animate-spin" />
-            ) : (
-              <GoogleIcon />
-            )}
+            {googleLoading ? <Loader className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
             Continuer avec Google
           </button>
 
-          {/* Divider */}
           <div className="flex items-center gap-3 mb-4">
             <div className="flex-1 h-px bg-border" />
             <span className="text-xs text-muted-foreground">ou</span>
@@ -173,39 +194,43 @@ const Login = () => {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-              <input
-                type="email"
-                placeholder="Adresse e-mail"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              />
+            <div>
+              <div className="relative">
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                <input
+                  type="email"
+                  placeholder="Adresse e-mail"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50"
+                />
+              </div>
+              {emailHint && <p className="text-xs text-destructive mt-1">{emailHint}</p>}
             </div>
-            {emailHint && <p className="text-xs text-destructive mt-1">{emailHint}</p>}
 
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-              <input
-                type={showPassword ? "text" : "password"}
-                placeholder="Mot de passe"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
-                className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                disabled={loading}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-50"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
+                <input
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Mot de passe"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  disabled={loading}
+                  className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/10 transition-all disabled:opacity-50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  disabled={loading}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+              {passwordHint && <p className="text-xs text-destructive mt-1">{passwordHint}</p>}
             </div>
-            {passwordHint && <p className="text-xs text-destructive mt-1">{passwordHint}</p>}
 
             <div className="flex items-center justify-between">
               <label className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -222,12 +247,16 @@ const Login = () => {
               disabled={!canSubmit}
               className="w-full bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {loading ? <><Loader className="w-4 h-4 animate-spin" /> Connexion...</> : "Continuer"}
+              {loading
+                ? <><Loader className="w-4 h-4 animate-spin" /> Connexion...</>
+                : "Continuer"
+              }
             </button>
           </form>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
-            Confiance de <span className="font-semibold text-foreground">2 400+</span> patients dans <span className="font-semibold text-foreground">18</span> cliniques
+            Confiance de <span className="font-semibold text-foreground">2 400+</span> patients dans{" "}
+            <span className="font-semibold text-foreground">18</span> cliniques
           </p>
 
           <p className="text-center text-xs text-muted-foreground mt-4">

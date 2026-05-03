@@ -42,6 +42,9 @@ import PatientHistory   from "@/pages/PatientHistory";
 import PatientMedecins  from "@/pages/PatientMedecins";
 import PatientEmergency from "@/pages/PatientEmergency";
 import PatientSettings  from "@/pages/PatientSettings";
+import PaymentSuccess from "@/pages/PaymentSuccess";
+import PaymentCancel  from "@/pages/PaymentCancel";
+import Checkout from "@/pages/Checkout";
 
 const queryClient = new QueryClient();
 
@@ -59,9 +62,16 @@ const SupabaseHashHandler = () => {
     if (!accessToken) return;
 
     if (type === "recovery") {
+      // Réinitialisation de mot de passe
       navigate(`/reset-password${hash}`, { replace: true });
     } else if (type === "invite") {
+      // Invitation médecin
       navigate(`/set-password${hash}`, { replace: true });
+    } else if (type === "signup") {
+      // ✅ Confirmation email après inscription
+      // Supabase a déjà connecté l'utilisateur via le token dans le hash
+      // On redirige vers /auth/callback qui gère la redirection selon le rôle
+      navigate(`/auth/callback`, { replace: true });
     }
   }, [navigate]);
 
@@ -86,6 +96,9 @@ const App = () => (
           <Route path="/unauthorized" element={<Unauthorized />} />
           <Route path="/auth/callback" element={<AuthCallback />} />
           <Route path="/complete-profile" element={<CompleteProfile />} />
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/payment-cancel"  element={<PaymentCancel />} />
 
           {/* Patient */}
           <Route path="/patient"           element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
@@ -116,7 +129,7 @@ const App = () => (
           <Route path="/family/parametres" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyParametres /></ProtectedRoute>} />
           <Route path="/family/*"          element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
 
-          {/* Admin — routes séparées */}
+          {/* Admin */}
           <Route path="/admin"             element={<ProtectedRoute allowedRoles={["admin"]}><AdminDashboard /></ProtectedRoute>} />
           <Route path="/admin/users"       element={<ProtectedRoute allowedRoles={["admin"]}><AdminUsers /></ProtectedRoute>} />
           <Route path="/admin/devices"     element={<ProtectedRoute allowedRoles={["admin"]}><AdminDevices /></ProtectedRoute>} />

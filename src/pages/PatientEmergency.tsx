@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, Phone, MapPin, Loader, CheckCircle, User, Heart } from "lucide-react";
+import { AlertTriangle, Phone, MapPin, Loader, User, Heart } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 
@@ -23,10 +23,7 @@ interface Medecin {
 const PatientEmergency = () => {
   const [proches, setProches] = useState<Proche[]>([]);
   const [medecin, setMedecin] = useState<Medecin | null>(null);
-  const [patientId, setPatientId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [sosSent, setSosSent] = useState(false);
-  const [sosSending, setSosSending] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -39,8 +36,6 @@ const PatientEmergency = () => {
         .eq("user_id", user.id)
         .single();
       if (!patient) { setLoading(false); return; }
-
-      setPatientId(patient.id);
 
       // Médecin
       if (patient.medecin_id) {
@@ -79,7 +74,6 @@ const PatientEmergency = () => {
           lien_parente: p.lien_parente,
           contact_prioritaire: p.contact_prioritaire,
         }));
-        // Prioritaires en premier
         setProches(mapped.sort((a, b) => (b.contact_prioritaire ? 1 : 0) - (a.contact_prioritaire ? 1 : 0)));
       }
 
@@ -88,24 +82,6 @@ const PatientEmergency = () => {
 
     init();
   }, []);
-
-  const handleSOS = async () => {
-    if (!patientId || sosSending) return;
-    setSosSending(true);
-
-    // Créer une alerte SOS dans Supabase
-    await supabase.from("alerts").insert({
-      patient_id: patientId,
-      severity: "CRITIQUE",
-      type: "SOS",
-      message: "🚨 SOS déclenché manuellement par le patient",
-      resolved: false,
-    });
-
-    setSosSending(false);
-    setSosSent(true);
-    setTimeout(() => setSosSent(false), 5000);
-  };
 
   return (
     <DashboardLayout role="patient">
@@ -117,33 +93,7 @@ const PatientEmergency = () => {
             <AlertTriangle className="w-6 h-6 text-red-500" /> Urgence
           </h1>
           <p className="text-muted-foreground text-sm mt-1">
-            En cas de danger, utilisez le bouton SOS
-          </p>
-        </motion.div>
-
-        {/* SOS Button */}
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-          className="bg-card border border-border rounded-2xl p-8 shadow-sm text-center">
-          <button
-            onClick={handleSOS}
-            disabled={sosSending || sosSent}
-            className={`w-40 h-40 rounded-full font-bold text-2xl mx-auto flex items-center justify-center gap-3 flex-col transition-all shadow-lg ${
-              sosSent
-                ? "bg-green-500 text-white scale-95"
-                : "bg-red-500 text-white hover:bg-red-600 hover:scale-105 active:scale-95 animate-pulse"
-            } disabled:opacity-80`}>
-            {sosSending ? (
-              <Loader className="w-10 h-10 animate-spin" />
-            ) : sosSent ? (
-              <><CheckCircle className="w-10 h-10" /><span className="text-sm">Envoyé !</span></>
-            ) : (
-              <><AlertTriangle className="w-10 h-10" />SOS</>
-            )}
-          </button>
-          <p className="text-sm text-muted-foreground mt-6">
-            {sosSent
-              ? "✅ Alerte envoyée — votre médecin et vos proches ont été notifiés"
-              : "Appuyez pour alerter votre médecin et vos proches instantanément"}
+            Contacts d'urgence et localisation GPS
           </p>
         </motion.div>
 
