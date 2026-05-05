@@ -6,7 +6,8 @@ import {
   Battery, MapPin, AlertTriangle, Clock, User, Phone,
   Home, Stethoscope, FileText, Users, Wifi, WifiOff,
   ChevronRight, Save, Loader, CheckCircle, TrendingUp,
-  Shield, Zap
+  Shield, Zap, Video, Calendar, X, Plus, ExternalLink,
+  Check, MessageSquare, XCircle,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
@@ -20,79 +21,43 @@ import {
   Tooltip, CartesianGrid, ReferenceLine
 } from "recharts";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
 interface PatientFiche {
-  id: string;
-  user_id: string;
-  nom: string;
-  prenom: string;
-  email: string;
-  telephone: string;
-  sexe: string | null;
-  date_naissance: string;
-  adresse: string;
-  maladies: string[];
-  antecedents: string;
-  traitements: string[];
-  notes_medecin: string;
-  status: string;
+  id: string; user_id: string; nom: string; prenom: string;
+  email: string; telephone: string; sexe: string | null;
+  date_naissance: string; adresse: string; maladies: string[];
+  antecedents: string; traitements: string[]; notes_medecin: string; status: string;
 }
-
-interface Device {
-  id: string;
-  actif: boolean;
-  dernier_signal: string | null;
-}
-
+interface Device { id: string; actif: boolean; dernier_signal: string | null; }
 interface VitalSign {
-  id: string;
-  bpm: number | null;
-  spo2: number | null;
-  temperature: number | null;
-  niveau_batterie: number | null;
-  chute: boolean | null;
-  latitude: number | null;
-  longitude: number | null;
-  recorded_at: string;
+  id: string; bpm: number | null; spo2: number | null; temperature: number | null;
+  niveau_batterie: number | null; chute: boolean | null; latitude: number | null;
+  longitude: number | null; recorded_at: string;
 }
+interface Alert { id: string; severity: string; type: string; message: string; resolved: boolean; created_at: string; }
+interface Anomalie { id: string; type_anomalie: string; score_confiance: number | null; detected_at: string; }
+interface Proche { proche_id: string; nom: string; prenom: string; telephone: string | null; email: string | null; }
 
-interface Alert {
+interface Consultation {
   id: string;
-  severity: string;
-  type: string;
-  message: string;
-  resolved: boolean;
+  zoom_link: string;
+  scheduled_at: string;
+  status: "planifiee" | "terminee" | "annulee";
+  notes: string | null;
+  demande_patient: boolean;
+  message_patient: string | null;
   created_at: string;
 }
 
-interface Anomalie {
-  id: string;
-  type_anomalie: string;
-  score_confiance: number | null;
-  detected_at: string;
-}
-
-interface Proche {
-  proche_id: string;
-  nom: string;
-  prenom: string;
-  telephone: string | null;
-  email: string | null;
-}
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
 const age = (dob: string) => {
   if (!dob) return "—";
   return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
 };
-
 const severityColor: Record<string, string> = {
   CRITICAL: "text-red-500 bg-red-500/10 border-red-500/20",
   HIGH:     "text-orange-500 bg-orange-500/10 border-orange-500/20",
   MEDIUM:   "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
   LOW:      "text-green-500 bg-green-500/10 border-green-500/20",
 };
-
 const batteryColor = (level: number | null) => {
   if (!level) return "text-muted-foreground";
   if (level > 60) return "text-green-500";
@@ -100,29 +65,27 @@ const batteryColor = (level: number | null) => {
   return "text-red-500";
 };
 
-// ── Section card ──────────────────────────────────────────────────────────────
-const Section = ({ title, icon, children, className = "" }: {
-  title: string; icon: React.ReactNode; children: React.ReactNode; className?: string;
+const Section = ({ title, icon, children, className = "", action }: {
+  title: string; icon: React.ReactNode; children: React.ReactNode;
+  className?: string; action?: React.ReactNode;
 }) => (
   <div className={`bg-card border border-border rounded-2xl p-5 shadow-sm ${className}`}>
-    <div className="flex items-center gap-2 mb-4">
-      <span className="text-primary">{icon}</span>
-      <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+    <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center gap-2">
+        <span className="text-primary">{icon}</span>
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      </div>
+      {action}
     </div>
     {children}
   </div>
 );
 
-// ── Vital mini card ───────────────────────────────────────────────────────────
 const VitalMini = ({ icon, label, value, unit, color = "text-foreground" }: {
-  icon: React.ReactNode; label: string; value: string | number | null;
-  unit: string; color?: string;
+  icon: React.ReactNode; label: string; value: string | number | null; unit: string; color?: string;
 }) => (
   <div className="bg-muted/50 rounded-xl p-3 flex flex-col gap-1">
-    <div className="flex items-center gap-1.5 text-muted-foreground">
-      {icon}
-      <span className="text-xs">{label}</span>
-    </div>
+    <div className="flex items-center gap-1.5 text-muted-foreground">{icon}<span className="text-xs">{label}</span></div>
     <div className="flex items-baseline gap-1">
       <span className={`text-xl font-bold ${color}`}>{value ?? "—"}</span>
       <span className="text-xs text-muted-foreground">{unit}</span>
@@ -130,101 +93,107 @@ const VitalMini = ({ icon, label, value, unit, color = "text-foreground" }: {
   </div>
 );
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+const consultationStatusBadge = (c: Consultation) => {
+  if (c.demande_patient && c.zoom_link === "en_attente")
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600">Demande patient</span>;
+  if (c.status === "planifiee")
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">Planifiée</span>;
+  if (c.status === "terminee")
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">Terminée</span>;
+  if (c.status === "annulee")
+    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600">Annulée</span>;
+  return null;
+};
+
 const DoctorPatientFiche = () => {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
 
-  const [patient, setPatient]       = useState<PatientFiche | null>(null);
-  const [device, setDevice]         = useState<Device | null>(null);
-  const [latestVital, setLatestVital] = useState<VitalSign | null>(null);
+  const [patient, setPatient]           = useState<PatientFiche | null>(null);
+  const [device, setDevice]             = useState<Device | null>(null);
+  const [latestVital, setLatestVital]   = useState<VitalSign | null>(null);
   const [vitalsHistory, setVitalsHistory] = useState<VitalSign[]>([]);
-  const [alerts, setAlerts]         = useState<Alert[]>([]);
-  const [anomalies, setAnomalies]   = useState<Anomalie[]>([]);
-  const [proches, setProches]       = useState<Proche[]>([]);
-  const [notes, setNotes]           = useState("");
-  const [savingNotes, setSavingNotes] = useState(false);
-  const [notesSaved, setNotesSaved] = useState(false);
-  const [loading, setLoading]       = useState(true);
+  const [alerts, setAlerts]             = useState<Alert[]>([]);
+  const [anomalies, setAnomalies]       = useState<Anomalie[]>([]);
+  const [proches, setProches]           = useState<Proche[]>([]);
+  const [notes, setNotes]               = useState("");
+  const [savingNotes, setSavingNotes]   = useState(false);
+  const [notesSaved, setNotesSaved]     = useState(false);
+  const [loading, setLoading]           = useState(true);
   const [activeVitalTab, setActiveVitalTab] = useState<"bpm" | "spo2" | "temperature">("bpm");
+
+  // ── Consultation states ──
+  const [consultations, setConsultations]     = useState<Consultation[]>([]);
+  const [showConsultForm, setShowConsultForm] = useState(false);
+  const [consultLoading, setConsultLoading]   = useState(false);
+  const [consultForm, setConsultForm] = useState({ zoom_link: "", scheduled_at: "", notes: "" });
+
+  // ── Réponse à une demande patient ──
+  const [repondreId, setRepondreId]         = useState<string | null>(null);
+  const [repondreZoom, setRepondreZoom]     = useState("");
+  const [repondreLoading, setRepondreLoading] = useState(false);
+
+  const loadConsultations = async (pid: string) => {
+    const { data } = await supabase
+      .from("consultations")
+      .select("id, zoom_link, scheduled_at, status, notes, demande_patient, message_patient, created_at")
+      .eq("patient_id", pid)
+      .order("scheduled_at", { ascending: false })
+      .limit(10);
+    setConsultations((data as Consultation[]) || []);
+  };
 
   const load = useCallback(async () => {
     if (!patientId) return;
 
-    // ── Patient ──────────────────────────────────────────────
     const { data: p } = await supabase
       .from("patients")
       .select(`id, user_id, maladies, date_naissance, adresse, antecedents, traitements, notes_medecin, status,
                utilisateurs!patients_user_id_fkey(nom, prenom, email, telephone, sexe)`)
-      .eq("id", patientId)
-      .single();
+      .eq("id", patientId).single();
 
     if (!p) { navigate("/doctor/patients"); return; }
 
     const u = p.utilisateurs as any;
-    const mapped: PatientFiche = {
+    setPatient({
       id: p.id, user_id: p.user_id,
       nom: u?.nom || "", prenom: u?.prenom || "",
       email: u?.email || "", telephone: u?.telephone || "",
-      sexe: u?.sexe || null,
-      date_naissance: p.date_naissance || "",
+      sexe: u?.sexe || null, date_naissance: p.date_naissance || "",
       adresse: p.adresse || "", maladies: p.maladies || [],
       antecedents: p.antecedents || "", traitements: p.traitements || [],
       notes_medecin: p.notes_medecin || "", status: p.status || "offline",
-    };
-    setPatient(mapped);
-    setNotes(mapped.notes_medecin);
+    });
+    setNotes(p.notes_medecin || "");
 
-    // ── Device ───────────────────────────────────────────────
     const { data: devData } = await supabase
-      .from("devices")
-      .select("id, actif, dernier_signal")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .from("devices").select("id, actif, dernier_signal")
+      .eq("patient_id", patientId).order("created_at", { ascending: false }).limit(1).maybeSingle();
     setDevice(devData as Device | null);
 
     if (devData) {
-      // ── Latest vital ─────────────────────────────────────
       const { data: vLatest } = await supabase
         .from("vital_signs")
         .select("id, bpm, spo2, temperature, niveau_batterie, chute, latitude, longitude, recorded_at")
-        .eq("device_id", devData.id)
-        .order("recorded_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        .eq("device_id", devData.id).order("recorded_at", { ascending: false }).limit(1).maybeSingle();
       setLatestVital(vLatest as VitalSign | null);
 
-      // ── History (last 50 points) ─────────────────────────
       const { data: vHistory } = await supabase
-        .from("vital_signs")
-        .select("id, bpm, spo2, temperature, recorded_at")
-        .eq("device_id", devData.id)
-        .order("recorded_at", { ascending: true })
-        .limit(50);
+        .from("vital_signs").select("id, bpm, spo2, temperature, recorded_at")
+        .eq("device_id", devData.id).order("recorded_at", { ascending: true }).limit(50);
       setVitalsHistory((vHistory as VitalSign[]) || []);
     }
 
-    // ── Alerts (last 5 unresolved) ───────────────────────────
     const { data: aData } = await supabase
-      .from("alerts")
-      .select("id, severity, type, message, resolved, created_at")
-      .eq("patient_id", patientId)
-      .order("created_at", { ascending: false })
-      .limit(5);
+      .from("alerts").select("id, severity, type, message, resolved, created_at")
+      .eq("patient_id", patientId).order("created_at", { ascending: false }).limit(5);
     setAlerts((aData as Alert[]) || []);
 
-    // ── Anomalies (last 5) ───────────────────────────────────
     const { data: anData } = await supabase
-      .from("anomalies")
-      .select("id, type_anomalie, score_confiance, detected_at")
-      .eq("patient_id", patientId)
-      .order("detected_at", { ascending: false })
-      .limit(5);
+      .from("anomalies").select("id, type_anomalie, score_confiance, detected_at")
+      .eq("patient_id", patientId).order("detected_at", { ascending: false }).limit(5);
     setAnomalies((anData as Anomalie[]) || []);
 
-    // ── Proches ──────────────────────────────────────────────
     const { data: ppData } = await supabase
       .from("proche_patient")
       .select("proche_id, utilisateurs!proche_patient_proche_id_fkey(nom, prenom, email, telephone)")
@@ -237,10 +206,129 @@ const DoctorPatientFiche = () => {
       })
     );
 
+    await loadConsultations(patientId);
     setLoading(false);
   }, [patientId, navigate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Planifier une consultation (médecin initie) ──
+  const handlePlanifierConsultation = async () => {
+    if (!patient || !consultForm.zoom_link || !consultForm.scheduled_at) {
+      toast.error("Lien Zoom et date/heure sont obligatoires."); return;
+    }
+    if (!consultForm.zoom_link.startsWith("http")) {
+      toast.error("Le lien Zoom doit commencer par http:// ou https://"); return;
+    }
+    setConsultLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase.from("consultations").insert({
+        patient_id: patient.id, medecin_id: user.id,
+        zoom_link: consultForm.zoom_link.trim(),
+        scheduled_at: new Date(consultForm.scheduled_at).toISOString(),
+        notes: consultForm.notes.trim() || null,
+        status: "planifiee", demande_patient: false,
+      });
+      if (error) throw error;
+      await supabase.from("notifications").insert({
+        user_id: patient.user_id,
+        title: "Consultation planifiée",
+        message: `Votre médecin a planifié une consultation vidéo le ${format(
+          new Date(consultForm.scheduled_at), "dd MMMM yyyy à HH:mm", { locale: fr }
+        )}.`,
+        read: false,
+      });
+      toast.success("Consultation planifiée et patient notifié !");
+      setConsultForm({ zoom_link: "", scheduled_at: "", notes: "" });
+      setShowConsultForm(false);
+      await loadConsultations(patient.id);
+    } catch (err: any) {
+      toast.error("Erreur : " + err.message);
+    } finally {
+      setConsultLoading(false);
+    }
+  };
+
+  // ── Accepter une demande patient (ajouter le lien Zoom) ──
+  const handleAccepterDemande = async (consultationId: string) => {
+    if (!repondreZoom.startsWith("http")) {
+      toast.error("Le lien Zoom doit commencer par http:// ou https://"); return;
+    }
+    if (!patient) return;
+    setRepondreLoading(true);
+    try {
+      const { error } = await supabase
+        .from("consultations")
+        .update({
+          zoom_link: repondreZoom.trim(),
+          status: "planifiee",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", consultationId);
+      if (error) throw error;
+
+      // Notifier le patient
+      await supabase.from("notifications").insert({
+        user_id: patient.user_id,
+        title: "Consultation confirmée ✅",
+        message: `Votre médecin a confirmé votre demande de consultation. Le lien Zoom est disponible dans votre espace consultation.`,
+        read: false,
+      });
+
+      toast.success("Demande acceptée, patient notifié !");
+      setRepondreId(null);
+      setRepondreZoom("");
+      await loadConsultations(patient.id);
+    } catch (err: any) {
+      toast.error("Erreur : " + err.message);
+    } finally {
+      setRepondreLoading(false);
+    }
+  };
+
+  // ── Refuser une demande patient ──
+  const handleRefuserDemande = async (consultationId: string) => {
+    if (!confirm("Confirmer le refus de cette demande ?") || !patient) return;
+    const { error } = await supabase
+      .from("consultations")
+      .update({ status: "annulee", updated_at: new Date().toISOString() })
+      .eq("id", consultationId);
+    if (!error) {
+      await supabase.from("notifications").insert({
+        user_id: patient.user_id,
+        title: "Demande de consultation refusée",
+        message: "Votre médecin n'est pas disponible à la date demandée. Vous pouvez faire une nouvelle demande.",
+        read: false,
+      });
+      toast.success("Demande refusée, patient notifié.");
+      await loadConsultations(patient.id);
+    }
+  };
+
+  const handleTerminerConsultation = async (consultationId: string) => {
+    const { error } = await supabase
+      .from("consultations")
+      .update({ status: "terminee", updated_at: new Date().toISOString() })
+      .eq("id", consultationId);
+    if (!error) {
+      toast.success("Consultation marquée comme terminée.");
+      if (patient) await loadConsultations(patient.id);
+    }
+  };
+
+  const handleAnnulerConsultation = async (consultationId: string) => {
+    if (!confirm("Confirmer l'annulation ?")) return;
+    const { error } = await supabase
+      .from("consultations")
+      .update({ status: "annulee", updated_at: new Date().toISOString() })
+      .eq("id", consultationId);
+    if (!error) {
+      toast.success("Consultation annulée.");
+      if (patient) await loadConsultations(patient.id);
+    }
+  };
 
   const handleSaveNotes = async () => {
     if (!patient) return;
@@ -264,8 +352,7 @@ const DoctorPatientFiche = () => {
     let convId = (existing as any)?.id;
     if (!convId) {
       const { data: inserted } = await supabase
-        .from("conversations")
-        .insert({ patient_id: patient.id, medecin_id: user.id })
+        .from("conversations").insert({ patient_id: patient.id, medecin_id: user.id })
         .select("id").single();
       convId = (inserted as any)?.id;
     }
@@ -281,29 +368,30 @@ const DoctorPatientFiche = () => {
     let convId = (existing as any)?.id;
     if (!convId) {
       const { data: inserted } = await supabase
-        .from("family_conversations")
-        .insert({ proche_id: procheId, medecin_id: user.id })
+        .from("family_conversations").insert({ proche_id: procheId, medecin_id: user.id })
         .select("id").single();
       convId = (inserted as any)?.id;
     }
     if (convId) navigate(`/doctor/messages?tab=proches&conversation=${convId}`);
   };
 
-  // ── Chart data ────────────────────────────────────────────────────────────
   const chartData = vitalsHistory.map((v) => ({
     time: format(new Date(v.recorded_at), "HH:mm", { locale: fr }),
-    bpm: v.bpm,
-    spo2: v.spo2,
+    bpm: v.bpm, spo2: v.spo2,
     temperature: v.temperature ? Number(v.temperature) : null,
   }));
 
   const vitalConfig = {
-    bpm:         { key: "bpm",         color: "#ef4444", label: "BPM",          unit: "bpm",  ref: [60, 100] },
-    spo2:        { key: "spo2",        color: "#3b82f6", label: "SpO₂",         unit: "%",    ref: [95, 100] },
-    temperature: { key: "temperature", color: "#f97316", label: "Température",  unit: "°C",   ref: [36, 37.5] },
+    bpm:         { key: "bpm",         color: "#ef4444", label: "BPM",         unit: "bpm", ref: [60, 100] },
+    spo2:        { key: "spo2",        color: "#3b82f6", label: "SpO₂",        unit: "%",   ref: [95, 100] },
+    temperature: { key: "temperature", color: "#f97316", label: "Température", unit: "°C",  ref: [36, 37.5] },
   };
-
   const vc = vitalConfig[activeVitalTab];
+
+  // Nombre de demandes en attente
+  const demandesEnAttente = consultations.filter(
+    c => c.demande_patient && c.zoom_link === "en_attente"
+  ).length;
 
   if (loading) {
     return (
@@ -327,22 +415,17 @@ const DoctorPatientFiche = () => {
     <DashboardLayout role="doctor">
       <div className="max-w-7xl space-y-6">
 
-        {/* ── Back + Header ── */}
+        {/* Header */}
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <button
-            onClick={() => navigate("/doctor/patients")}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-          >
+          <button onClick={() => navigate("/doctor/patients")}
+            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <ArrowLeft className="w-4 h-4" /> Retour aux patients
           </button>
-
           <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-center gap-4">
                 <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">
-                    {initials}
-                  </div>
+                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">{initials}</div>
                   <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-card ${isOnline ? "bg-green-500" : "bg-muted-foreground"}`} />
                 </div>
                 <div>
@@ -355,10 +438,8 @@ const DoctorPatientFiche = () => {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={handleStartConversation}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all"
-                >
+                <button onClick={handleStartConversation}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all">
                   <MessageCircle className="w-4 h-4" /> Envoyer un message
                 </button>
                 <StatusBadge status={patient.status as any} size="md" />
@@ -367,89 +448,35 @@ const DoctorPatientFiche = () => {
           </div>
         </motion.div>
 
-        {/* ── Grid layout ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-          {/* ── LEFT COLUMN ── */}
+          {/* LEFT */}
           <div className="space-y-5">
 
-            {/* Infos personnelles */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
               <Section title="Informations personnelles" icon={<User className="w-4 h-4" />}>
                 <div className="space-y-2 text-sm">
-                  {patient.telephone && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Phone className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-foreground">{patient.telephone}</span>
-                    </div>
-                  )}
-                  {patient.email && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <FileText className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-foreground truncate">{patient.email}</span>
-                    </div>
-                  )}
-                  {patient.adresse && (
-                    <div className="flex items-start gap-2 text-muted-foreground">
-                      <Home className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                      <span className="text-foreground">{patient.adresse}</span>
-                    </div>
-                  )}
-                  {patient.date_naissance && (
-                    <div className="flex items-center gap-2 text-muted-foreground">
-                      <Clock className="w-3.5 h-3.5 shrink-0" />
-                      <span className="text-foreground">
-                        {format(new Date(patient.date_naissance), "dd MMMM yyyy", { locale: fr })}
-                      </span>
-                    </div>
-                  )}
+                  {patient.telephone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground">{patient.telephone}</span></div>}
+                  {patient.email && <div className="flex items-center gap-2 text-muted-foreground"><FileText className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground truncate">{patient.email}</span></div>}
+                  {patient.adresse && <div className="flex items-start gap-2 text-muted-foreground"><Home className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span className="text-foreground">{patient.adresse}</span></div>}
+                  {patient.date_naissance && <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground">{format(new Date(patient.date_naissance), "dd MMMM yyyy", { locale: fr })}</span></div>}
                 </div>
               </Section>
             </motion.div>
 
-            {/* Antécédents & traitements */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
               <Section title="Dossier médical" icon={<Stethoscope className="w-4 h-4" />}>
                 <div className="space-y-3 text-sm">
-                  {patient.maladies?.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Maladies</p>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.maladies.map((m, i) => (
-                          <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">{m}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {patient.antecedents && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1">Antécédents</p>
-                      <p className="text-foreground text-xs leading-relaxed">{patient.antecedents}</p>
-                    </div>
-                  )}
-                  {patient.traitements?.length > 0 && (
-                    <div>
-                      <p className="text-xs text-muted-foreground mb-1.5">Traitements</p>
-                      <div className="flex flex-wrap gap-1">
-                        {patient.traitements.map((t, i) => (
-                          <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {!patient.maladies?.length && !patient.antecedents && !patient.traitements?.length && (
-                    <p className="text-xs text-muted-foreground">Aucune information renseignée</p>
-                  )}
+                  {patient.maladies?.length > 0 && <div><p className="text-xs text-muted-foreground mb-1.5">Maladies</p><div className="flex flex-wrap gap-1">{patient.maladies.map((m, i) => <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">{m}</span>)}</div></div>}
+                  {patient.antecedents && <div><p className="text-xs text-muted-foreground mb-1">Antécédents</p><p className="text-foreground text-xs leading-relaxed">{patient.antecedents}</p></div>}
+                  {patient.traitements?.length > 0 && <div><p className="text-xs text-muted-foreground mb-1.5">Traitements</p><div className="flex flex-wrap gap-1">{patient.traitements.map((t, i) => <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>)}</div></div>}
+                  {!patient.maladies?.length && !patient.antecedents && !patient.traitements?.length && <p className="text-xs text-muted-foreground">Aucune information renseignée</p>}
                 </div>
               </Section>
             </motion.div>
 
-            {/* Proches */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
               <Section title={`Proches (${proches.length})`} icon={<Users className="w-4 h-4" />}>
-                {proches.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Aucun proche lié</p>
-                ) : (
+                {proches.length === 0 ? <p className="text-xs text-muted-foreground">Aucun proche lié</p> : (
                   <div className="space-y-2">
                     {proches.map((p) => (
                       <div key={p.proche_id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/50">
@@ -458,17 +485,11 @@ const DoctorPatientFiche = () => {
                             {`${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?"}
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate">
-                              {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
-                            </p>
+                            <p className="text-xs font-medium text-foreground truncate">{[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}</p>
                             {p.telephone && <p className="text-[10px] text-muted-foreground">{p.telephone}</p>}
                           </div>
                         </div>
-                        <button
-                          onClick={() => handleMessageProche(p.proche_id)}
-                          className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors shrink-0"
-                          title="Envoyer un message"
-                        >
+                        <button onClick={() => handleMessageProche(p.proche_id)} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors shrink-0">
                           <MessageCircle className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -477,12 +498,151 @@ const DoctorPatientFiche = () => {
                 )}
               </Section>
             </motion.div>
+
+            {/* ── CONSULTATIONS ── */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+              <Section
+                title={`Consultations vidéo${demandesEnAttente > 0 ? ` · ${demandesEnAttente} demande(s)` : ""}`}
+                icon={<Video className="w-4 h-4" />}
+                action={
+                  <button onClick={() => setShowConsultForm((v) => !v)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all">
+                    {showConsultForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    {showConsultForm ? "Annuler" : "Planifier"}
+                  </button>
+                }
+              >
+                {/* Formulaire planification médecin */}
+                {showConsultForm && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Lien Zoom *</label>
+                      <input type="url" placeholder="https://zoom.us/j/..." value={consultForm.zoom_link}
+                        onChange={(e) => setConsultForm(p => ({ ...p, zoom_link: e.target.value }))}
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Date et heure *</label>
+                      <input type="datetime-local" value={consultForm.scheduled_at}
+                        min={new Date().toISOString().slice(0, 16)}
+                        onChange={(e) => setConsultForm(p => ({ ...p, scheduled_at: e.target.value }))}
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Notes (optionnel)</label>
+                      <textarea placeholder="Instructions pour le patient..." value={consultForm.notes}
+                        onChange={(e) => setConsultForm(p => ({ ...p, notes: e.target.value }))}
+                        rows={2} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all resize-none" />
+                    </div>
+                    <button onClick={handlePlanifierConsultation}
+                      disabled={consultLoading || !consultForm.zoom_link || !consultForm.scheduled_at}
+                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
+                      {consultLoading ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</> : <><Calendar className="w-3.5 h-3.5" /> Confirmer et notifier le patient</>}
+                    </button>
+                  </motion.div>
+                )}
+
+                {/* Liste consultations */}
+                {consultations.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aucune consultation.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {consultations.map((c) => (
+                      <div key={c.id} className={`p-3 rounded-xl border bg-muted/30 space-y-2 ${
+                        c.demande_patient && c.zoom_link === "en_attente"
+                          ? "border-yellow-500/30 bg-yellow-500/5"
+                          : "border-border"
+                      }`}>
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Calendar className="w-3 h-3" />
+                            <span className="font-medium text-foreground">
+                              {format(new Date(c.scheduled_at), "dd MMM yyyy · HH:mm", { locale: fr })}
+                            </span>
+                          </div>
+                          {consultationStatusBadge(c)}
+                        </div>
+
+                        {/* Message du patient si demande */}
+                        {c.demande_patient && c.message_patient && (
+                          <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-lg">
+                            <MessageSquare className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
+                            <p className="text-xs text-muted-foreground italic">"{c.message_patient}"</p>
+                          </div>
+                        )}
+
+                        {c.notes && <p className="text-xs text-muted-foreground italic">{c.notes}</p>}
+
+                        {/* ── CAS 1 : Demande patient en attente → Accepter/Refuser ── */}
+                        {c.demande_patient && c.zoom_link === "en_attente" ? (
+                          <div className="space-y-2">
+                            {repondreId === c.id ? (
+                              <div className="space-y-2">
+                                <input type="url" placeholder="https://zoom.us/j/..."
+                                  value={repondreZoom}
+                                  onChange={(e) => setRepondreZoom(e.target.value)}
+                                  className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-primary/50 transition-all" />
+                                <div className="flex gap-2">
+                                  <button onClick={() => handleAccepterDemande(c.id)}
+                                    disabled={repondreLoading || !repondreZoom}
+                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all disabled:opacity-50">
+                                    {repondreLoading ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                    Confirmer
+                                  </button>
+                                  <button onClick={() => { setRepondreId(null); setRepondreZoom(""); }}
+                                    className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted transition-all">
+                                    Annuler
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2">
+                                <button onClick={() => setRepondreId(c.id)}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
+                                  <Check className="w-3 h-3" /> Accepter + lien Zoom
+                                </button>
+                                <button onClick={() => handleRefuserDemande(c.id)}
+                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
+                                  <XCircle className="w-3 h-3" /> Refuser
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          /* ── CAS 2 : Consultation normale ── */
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {c.zoom_link && c.zoom_link !== "en_attente" && (
+                              <a href={c.zoom_link} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all">
+                                <Video className="w-3 h-3" /> Rejoindre <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                            )}
+                            {c.status === "planifiee" && (
+                              <>
+                                <button onClick={() => handleTerminerConsultation(c.id)}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
+                                  <Check className="w-3 h-3" /> Terminée
+                                </button>
+                                <button onClick={() => handleAnnulerConsultation(c.id)}
+                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
+                                  <X className="w-3 h-3" /> Annuler
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            </motion.div>
           </div>
 
-          {/* ── MIDDLE + RIGHT COLUMN ── */}
+          {/* MIDDLE + RIGHT */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* Device + latest vitals */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-4">
@@ -494,56 +654,28 @@ const DoctorPatientFiche = () => {
                     <div className="flex items-center gap-1.5 text-xs">
                       {isOnline
                         ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
-                        : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>
-                      }
-                      {device.dernier_signal && (
-                        <span className="text-muted-foreground ml-1">
-                          · {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}
-                        </span>
-                      )}
+                        : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>}
+                      {device.dernier_signal && <span className="text-muted-foreground ml-1">· {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}</span>}
                     </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">Aucun appareil</span>
-                  )}
+                  ) : <span className="text-xs text-muted-foreground">Aucun appareil</span>}
                 </div>
-
                 {latestVital ? (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <VitalMini icon={<Heart className="w-3.5 h-3.5" />} label="Fréquence cardiaque"
-                      value={latestVital.bpm} unit="bpm"
-                      color={latestVital.bpm && (latestVital.bpm < 60 || latestVital.bpm > 100) ? "text-red-500" : "text-foreground"} />
-                    <VitalMini icon={<Activity className="w-3.5 h-3.5" />} label="SpO₂"
-                      value={latestVital.spo2 ? `${latestVital.spo2}` : null} unit="%"
-                      color={latestVital.spo2 && latestVital.spo2 < 95 ? "text-red-500" : "text-foreground"} />
-                    <VitalMini icon={<Thermometer className="w-3.5 h-3.5" />} label="Température"
-                      value={latestVital.temperature ? Number(latestVital.temperature).toFixed(1) : null} unit="°C"
-                      color={latestVital.temperature && (latestVital.temperature < 36 || latestVital.temperature > 37.5) ? "text-orange-500" : "text-foreground"} />
-                    <VitalMini icon={<Battery className="w-3.5 h-3.5" />} label="Batterie"
-                      value={latestVital.niveau_batterie} unit="%"
-                      color={batteryColor(latestVital.niveau_batterie)} />
+                    <VitalMini icon={<Heart className="w-3.5 h-3.5" />} label="Fréquence cardiaque" value={latestVital.bpm} unit="bpm" color={latestVital.bpm && (latestVital.bpm < 60 || latestVital.bpm > 100) ? "text-red-500" : "text-foreground"} />
+                    <VitalMini icon={<Activity className="w-3.5 h-3.5" />} label="SpO₂" value={latestVital.spo2 ? `${latestVital.spo2}` : null} unit="%" color={latestVital.spo2 && latestVital.spo2 < 95 ? "text-red-500" : "text-foreground"} />
+                    <VitalMini icon={<Thermometer className="w-3.5 h-3.5" />} label="Température" value={latestVital.temperature ? Number(latestVital.temperature).toFixed(1) : null} unit="°C" color={latestVital.temperature && (latestVital.temperature < 36 || latestVital.temperature > 37.5) ? "text-orange-500" : "text-foreground"} />
+                    <VitalMini icon={<Battery className="w-3.5 h-3.5" />} label="Batterie" value={latestVital.niveau_batterie} unit="%" color={batteryColor(latestVital.niveau_batterie)} />
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {["Fréquence cardiaque", "SpO₂", "Température", "Batterie"].map((l) => (
-                      <div key={l} className="bg-muted/50 rounded-xl p-3 h-20 animate-pulse" />
-                    ))}
+                    {["Fréquence cardiaque", "SpO₂", "Température", "Batterie"].map((l) => <div key={l} className="bg-muted/50 rounded-xl p-3 h-20 animate-pulse" />)}
                   </div>
                 )}
-
-                {latestVital?.chute && (
-                  <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-medium">
-                    <AlertTriangle className="w-3.5 h-3.5" /> Chute détectée lors de la dernière mesure
-                  </div>
-                )}
-
+                {latestVital?.chute && <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-medium"><AlertTriangle className="w-3.5 h-3.5" /> Chute détectée</div>}
                 {latestVital?.latitude && latestVital?.longitude && (
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <MapPin className="w-3 h-3" />
-                    <a
-                      href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`}
-                      target="_blank" rel="noopener noreferrer"
-                      className="hover:text-primary transition-colors"
-                    >
+                    <a href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
                       {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
                     </a>
                   </div>
@@ -551,26 +683,19 @@ const DoctorPatientFiche = () => {
               </div>
             </motion.div>
 
-            {/* ECG live */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
               <LiveECGChart title="Moniteur ECG en direct" />
             </motion.div>
 
-            {/* Vitals history chart */}
             {vitalsHistory.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
                 <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
                   <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                      <TrendingUp className="w-4 h-4 text-primary" />
-                      <h3 className="text-sm font-semibold text-foreground">Historique des constantes</h3>
-                    </div>
+                    <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Historique des constantes</h3></div>
                     <div className="flex gap-1">
                       {(["bpm", "spo2", "temperature"] as const).map((tab) => (
                         <button key={tab} onClick={() => setActiveVitalTab(tab)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                            activeVitalTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
-                          }`}>
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${activeVitalTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
                           {vitalConfig[tab].label}
                         </button>
                       ))}
@@ -582,14 +707,10 @@ const DoctorPatientFiche = () => {
                         <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="time" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
                         <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-                        <Tooltip
-                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                          labelStyle={{ color: "hsl(var(--muted-foreground))" }}
-                        />
+                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} labelStyle={{ color: "hsl(var(--muted-foreground))" }} />
                         <ReferenceLine y={vc.ref[0]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
                         <ReferenceLine y={vc.ref[1]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
-                        <Line type="monotone" dataKey={vc.key} stroke={vc.color} strokeWidth={2}
-                          dot={false} isAnimationActive={false} connectNulls />
+                        <Line type="monotone" dataKey={vc.key} stroke={vc.color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
@@ -598,12 +719,9 @@ const DoctorPatientFiche = () => {
               </motion.div>
             )}
 
-            {/* Alerts */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <Section title={`Alertes récentes (${alerts.length})`} icon={<AlertTriangle className="w-4 h-4" />}>
-                {alerts.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Aucune alerte récente</p>
-                ) : (
+                {alerts.length === 0 ? <p className="text-xs text-muted-foreground">Aucune alerte récente</p> : (
                   <div className="space-y-2">
                     {alerts.map((a) => (
                       <div key={a.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs ${severityColor[a.severity] || "text-muted-foreground bg-muted border-border"}`}>
@@ -618,10 +736,7 @@ const DoctorPatientFiche = () => {
                         </div>
                       </div>
                     ))}
-                    <button
-                      onClick={() => navigate("/doctor/alerts")}
-                      className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
-                    >
+                    <button onClick={() => navigate("/doctor/alerts")} className="flex items-center gap-1 text-xs text-primary hover:underline mt-1">
                       Voir toutes les alertes <ChevronRight className="w-3 h-3" />
                     </button>
                   </div>
@@ -629,7 +744,6 @@ const DoctorPatientFiche = () => {
               </Section>
             </motion.div>
 
-            {/* Anomalies */}
             {anomalies.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
                 <Section title="Anomalies détectées par IA" icon={<Zap className="w-4 h-4" />}>
@@ -638,9 +752,7 @@ const DoctorPatientFiche = () => {
                       <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/50 text-xs">
                         <div>
                           <p className="font-medium text-foreground">{a.type_anomalie.replace(/_/g, " ")}</p>
-                          <p className="text-muted-foreground mt-0.5">
-                            {formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}
-                          </p>
+                          <p className="text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}</p>
                         </div>
                         {a.score_confiance != null && (
                           <div className="flex items-center gap-1.5">
@@ -657,33 +769,21 @@ const DoctorPatientFiche = () => {
               </motion.div>
             )}
 
-            {/* Notes cliniques */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
               <Section title="Notes cliniques" icon={<FileText className="w-4 h-4" />}>
-                <textarea
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
+                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
                   placeholder="Ajouter des notes cliniques..."
-                  className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none"
-                />
+                  className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none" />
                 <div className="flex items-center justify-between mt-3">
-                  {notesSaved && (
-                    <span className="flex items-center gap-1 text-xs text-green-500">
-                      <CheckCircle className="w-3.5 h-3.5" /> Sauvegardé
-                    </span>
-                  )}
-                  <button
-                    onClick={handleSaveNotes}
-                    disabled={savingNotes}
-                    className="ml-auto flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-                  >
+                  {notesSaved && <span className="flex items-center gap-1 text-xs text-green-500"><CheckCircle className="w-3.5 h-3.5" /> Sauvegardé</span>}
+                  <button onClick={handleSaveNotes} disabled={savingNotes}
+                    className="ml-auto flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
                     {savingNotes ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
                     Sauvegarder
                   </button>
                 </div>
               </Section>
             </motion.div>
-
           </div>
         </div>
       </div>
