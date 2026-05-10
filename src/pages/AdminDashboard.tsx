@@ -106,21 +106,18 @@ const AdminDashboard = () => {
     nom: "", email: "", telephone: "", specialite: "", numero_licence: "",
   });
 
-  // ── Add device states ──
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [addDeviceLoading, setAddDeviceLoading] = useState(false);
   const [addDeviceError, setAddDeviceError] = useState("");
   const [addDeviceSuccess, setAddDeviceSuccess] = useState("");
   const [deleteDeviceLoading, setDeleteDeviceLoading] = useState<string | null>(null);
 
-  // ── Device request states ──
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState<Record<string, string>>({});
   const [approveSuccess, setApproveSuccess] = useState<string | null>(null);
 
   const queryClient = useQueryClient();
 
-  // ── KPI Stats ──
   const { data: patientsActifs } = useQuery({
     queryKey: ["stat-patients-actifs"],
     queryFn: async () => {
@@ -163,7 +160,6 @@ const AdminDashboard = () => {
     },
   });
 
-  // ── Demandes patient → médecin ──
   const { data: demandesList, isLoading: demandesLoading } = useQuery({
     queryKey: ["admin-demandes"],
     queryFn: async () => {
@@ -194,7 +190,6 @@ const AdminDashboard = () => {
     },
   });
 
-  // ── Device Requests (bracelets) ──
   const { data: deviceRequests, isLoading: deviceRequestsLoading } = useQuery({
     queryKey: ["admin-device-requests"],
     enabled: tab === "bracelets",
@@ -224,36 +219,24 @@ const AdminDashboard = () => {
     refetchInterval: 30000,
   });
 
-  // ── Available devices (not assigned) ──
   const { data: availableDevices } = useQuery({
     queryKey: ["available-devices"],
     enabled: tab === "bracelets",
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("devices")
-        .select("id")
-        .is("patient_id", null);
+      const { data, error } = await supabase.from("devices").select("id").is("patient_id", null);
       if (error) throw error;
       return data || [];
     },
   });
 
-  // ── Add device ──
   const handleAddDevice = async () => {
     setAddDeviceLoading(true);
     setAddDeviceError("");
     setAddDeviceSuccess("");
     try {
-      // Générer un UUID automatiquement
-      const { data, error } = await supabase
-        .from("devices")
-        .insert({ actif: false })
-        .select("id")
-        .single();
-
+      const { data, error } = await supabase.from("devices").insert({ actif: false }).select("id").single();
       if (error) throw error;
-
-      setAddDeviceSuccess(`✅ Device ajouté : ${data.id}`);
+      setAddDeviceSuccess(`✅ Dispositif ajouté : ${data.id}`);
       queryClient.invalidateQueries({ queryKey: ["admin-devices"] });
       queryClient.invalidateQueries({ queryKey: ["available-devices"] });
       setTimeout(() => setAddDeviceSuccess(""), 5000);
@@ -264,17 +247,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Delete device (only if not assigned) ──
   const handleDeleteDevice = async (deviceId: string) => {
-    if (!confirm("Supprimer ce capteur ? Cette action est irréversible.")) return;
+    if (!confirm("Supprimer ce dispositif ? Cette action est irréversible.")) return;
     setDeleteDeviceLoading(deviceId);
     try {
-      const { error } = await supabase
-        .from("devices")
-        .delete()
-        .eq("id", deviceId)
-        .is("patient_id", null);
-
+      const { error } = await supabase.from("devices").delete().eq("id", deviceId).is("patient_id", null);
       if (error) throw error;
       queryClient.invalidateQueries({ queryKey: ["admin-devices"] });
       queryClient.invalidateQueries({ queryKey: ["available-devices"] });
@@ -285,43 +262,21 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Approve device request ──
   const handleApprove = async (request: DeviceRequest) => {
     const deviceId = selectedDeviceId[request.id];
-    if (!deviceId) {
-      alert("Veuillez sélectionner un device à assigner.");
-      return;
-    }
-
+    if (!deviceId) { alert("Veuillez sélectionner un dispositif à assigner."); return; }
     setProcessingId(request.id);
     setApproveSuccess(null);
-
     try {
-      // 1. Générer QR code contenant le device_id
       const qrDataUrl = await QRCode.toDataURL(deviceId, { width: 300 });
-
-      // 2. Mettre à jour la device_request
-      const { error: updateError } = await supabase
-        .from("device_requests")
-        .update({
-          status: "approved",
-          device_id: deviceId,
-          qr_code: qrDataUrl,
-          approved_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", request.id);
-
+      const { error: updateError } = await supabase.from("device_requests").update({
+        status: "approved", device_id: deviceId, qr_code: qrDataUrl,
+        approved_at: new Date().toISOString(), updated_at: new Date().toISOString(),
+      }).eq("id", request.id);
       if (updateError) throw updateError;
-
-      // 3. Envoyer email avec QR code via Supabase
-      // (optionnel — nécessite une edge function d'email)
-      // await supabase.functions.invoke("send-qr-email", {...})
-
       setApproveSuccess(request.id);
       queryClient.invalidateQueries({ queryKey: ["admin-device-requests"] });
       queryClient.invalidateQueries({ queryKey: ["available-devices"] });
-
       setTimeout(() => setApproveSuccess(null), 3000);
     } catch (e: any) {
       alert("Erreur lors de l'approbation : " + e.message);
@@ -330,19 +285,11 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Reject device request ──
   const handleReject = async (requestId: string) => {
     if (!confirm("Confirmer le refus de cette demande ?")) return;
     setProcessingId(requestId);
     try {
-      await supabase
-        .from("device_requests")
-        .update({
-          status: "rejected",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", requestId);
-
+      await supabase.from("device_requests").update({ status: "rejected", updated_at: new Date().toISOString() }).eq("id", requestId);
       queryClient.invalidateQueries({ queryKey: ["admin-device-requests"] });
     } catch (e: any) {
       alert("Erreur : " + e.message);
@@ -351,7 +298,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // ── Users ──
   const { data: users, isLoading: usersLoading, error: usersError } = useQuery({
     queryKey: ["admin-users"],
     queryFn: async () => {
@@ -366,7 +312,6 @@ const AdminDashboard = () => {
     return u.nom.toLowerCase().includes(term) || u.email.toLowerCase().includes(term) || u.role.toLowerCase().includes(term);
   });
 
-  // ── Devices ──
   const { data: devices, isLoading: devicesLoading } = useQuery({
     queryKey: ["admin-devices"],
     enabled: tab === "devices",
@@ -408,7 +353,6 @@ const AdminDashboard = () => {
     refetchInterval: 30000,
   });
 
-  // ── Logs ──
   const { data: alertLogs, isLoading: logsLoading } = useQuery({
     queryKey: ["admin-logs"],
     enabled: tab === "logs",
@@ -435,7 +379,6 @@ const AdminDashboard = () => {
     refetchInterval: 60000,
   });
 
-  // ── System ──
   const { data: dbPing, isLoading: systemLoading } = useQuery({
     queryKey: ["system-db-ping"],
     enabled: tab === "system",
@@ -463,7 +406,6 @@ const AdminDashboard = () => {
     refetchInterval: 60000,
   });
 
-  // ── Create médecin ──
   const handleCreateMedecin = async (e: React.FormEvent) => {
     e.preventDefault();
     setCreateError(""); setCreateSuccess("");
@@ -487,7 +429,6 @@ const AdminDashboard = () => {
     finally { setCreateLoading(false); }
   };
 
-  // ── Status badge helper ──
   const statusBadge = (status: string, paymentStatus: string) => {
     if (paymentStatus === "unpaid") return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-600">Non payé</span>;
     if (status === "pending") return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600">En attente</span>;
@@ -509,7 +450,7 @@ const AdminDashboard = () => {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             { icon: Users, label: "Patients actifs", value: patientsActifs?.toString() ?? "...", sub: "statut non offline" },
-            { icon: Cpu, label: "Capteurs en ligne", value: capteursEnLigne?.toString() ?? "...", sub: `${capteursHorsLigne ?? "..."} hors ligne` },
+            { icon: Cpu, label: "Dispositifs en ligne", value: capteursEnLigne?.toString() ?? "...", sub: `${capteursHorsLigne ?? "..."} hors ligne` },
             { icon: Activity, label: "Alertes (24h)", value: alertes24h?.toString() ?? "...", sub: `${alertesCritiques ?? "..."} critiques` },
             { icon: Clock, label: "Uptime système", value: "99.98%", sub: "30 derniers jours" },
           ].map((s, i) => (
@@ -522,17 +463,18 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Tabs */}
+        {/* ── Tabs ── */}
         <div className="flex gap-1 bg-muted p-1 rounded-xl w-fit flex-wrap">
           {([
-            { key: "users", label: "Utilisateurs" },
-            { key: "bracelets", label: "Bracelets", badge: true },
-            { key: "demandes", label: "Demandes" },
-            { key: "devices", label: "Capteurs" },
-            { key: "logs", label: "Journaux" },
-            { key: "system", label: "Système" },
+            { key: "users",     label: "Utilisateurs" },
+            { key: "bracelets", label: "Demandes de dispositifs" },
+            { key: "demandes",  label: "Demandes médecin" },
+            { key: "devices",   label: "Dispositifs" },
+            { key: "logs",      label: "Journaux" },
+            { key: "system",    label: "Système" },
           ] as const).map((t) => (
-            <button key={t.key} onClick={() => setTab(t.key)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${tab === t.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${tab === t.key ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
               {t.key === "bracelets" && <Package className="w-3.5 h-3.5" />}
               {t.label}
             </button>
@@ -541,7 +483,7 @@ const AdminDashboard = () => {
 
         <motion.div key={tab} initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
 
-          {/* ── BRACELETS (NOUVEAU) ── */}
+          {/* ── DEMANDES DE DISPOSITIFS ── */}
           {tab === "bracelets" && (
             <div className="space-y-4">
               <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
@@ -549,7 +491,7 @@ const AdminDashboard = () => {
                   <div>
                     <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
                       <Package className="w-5 h-5 text-primary" />
-                      Demandes de Bracelets IoT
+                      Demandes de Dispositifs IoT
                     </h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       Gérez les demandes de dispositifs des patients
@@ -565,7 +507,7 @@ const AdminDashboard = () => {
                 ) : !deviceRequests?.length ? (
                   <div className="py-16 text-center">
                     <Package className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                    <p className="text-sm text-muted-foreground">Aucune demande de bracelet.</p>
+                    <p className="text-sm text-muted-foreground">Aucune demande de dispositif.</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-border">
@@ -573,8 +515,6 @@ const AdminDashboard = () => {
                       <motion.div key={req.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}
                         className="p-4 hover:bg-muted/20 transition-colors">
                         <div className="flex flex-col lg:flex-row lg:items-center gap-4">
-
-                          {/* ── Infos patient ── */}
                           <div className="flex-1 space-y-1.5">
                             <div className="flex items-center gap-2">
                               <p className="font-semibold text-card-foreground">{req.patient_nom}</p>
@@ -592,64 +532,47 @@ const AdminDashboard = () => {
                               <span>{new Date(req.created_at).toLocaleDateString("fr-FR", { dateStyle: "medium" })}</span>
                             </div>
                             {req.device_id && (
-                              <p className="text-xs text-muted-foreground font-mono">
-                                Device : {req.device_id}
-                              </p>
+                              <p className="text-xs text-muted-foreground font-mono">Dispositif : {req.device_id}</p>
                             )}
                           </div>
 
-                          {/* ── Actions ── */}
                           {req.status === "pending" && req.payment_status === "paid" && (
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
                               <select
                                 value={selectedDeviceId[req.id] ?? ""}
                                 onChange={(e) => setSelectedDeviceId(prev => ({ ...prev, [req.id]: e.target.value }))}
                                 className="bg-muted border border-border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 min-w-[180px]">
-                                <option value="">Choisir un device...</option>
+                                <option value="">Choisir un dispositif...</option>
                                 {(availableDevices || []).map((d: { id: string }) => (
                                   <option key={d.id} value={d.id}>{d.id.slice(0, 8)}...</option>
                                 ))}
                               </select>
-
-                              <button
-                                onClick={() => handleApprove(req)}
+                              <button onClick={() => handleApprove(req)}
                                 disabled={processingId === req.id || !selectedDeviceId[req.id]}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-green-500/10 text-green-700 hover:bg-green-500/20 transition-all disabled:opacity-50">
-                                {processingId === req.id
-                                  ? <Loader className="w-4 h-4 animate-spin" />
-                                  : <Check className="w-4 h-4" />}
+                                {processingId === req.id ? <Loader className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                                 Approuver
                               </button>
-
-                              <button
-                                onClick={() => handleReject(req.id)}
-                                disabled={processingId === req.id}
+                              <button onClick={() => handleReject(req.id)} disabled={processingId === req.id}
                                 className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-red-500/10 text-red-700 hover:bg-red-500/20 transition-all disabled:opacity-50">
-                                <Ban className="w-4 h-4" />
-                                Refuser
+                                <Ban className="w-4 h-4" /> Refuser
                               </button>
                             </div>
                           )}
 
-                          {/* ── QR Code affiché si approuvé ── */}
                           {req.status === "approved" && req.qr_code && (
                             <div className="flex flex-col items-center gap-2">
-                              <img src={req.qr_code} alt="QR Code bracelet" className="w-20 h-20 rounded-lg border border-border" />
-                              <a
-                                href={req.qr_code}
-                                download={`qr-${req.patient_nom}.png`}
+                              <img src={req.qr_code} alt="QR Code dispositif" className="w-20 h-20 rounded-lg border border-border" />
+                              <a href={req.qr_code} download={`qr-${req.patient_nom}.png`}
                                 className="flex items-center gap-1 text-xs text-primary hover:underline">
-                                <QrCode className="w-3 h-3" />
-                                Télécharger QR
+                                <QrCode className="w-3 h-3" /> Télécharger QR
                               </a>
                             </div>
                           )}
 
-                          {/* ── Succès ── */}
                           {approveSuccess === req.id && (
                             <span className="flex items-center gap-1 text-xs text-green-600">
-                              <CheckCircle2 className="w-4 h-4" />
-                              Approuvé !
+                              <CheckCircle2 className="w-4 h-4" /> Approuvé !
                             </span>
                           )}
                         </div>
@@ -661,7 +584,7 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── USERS ── */}
+          {/* ── UTILISATEURS ── */}
           {tab === "users" && (
             <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               <div className="p-4 border-b border-border flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -669,7 +592,8 @@ const AdminDashboard = () => {
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                   <input type="text" placeholder="Rechercher un utilisateur..." value={search} onChange={(e) => setSearch(e.target.value)} className="w-full bg-muted rounded-xl pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20" />
                 </div>
-                <button onClick={() => { setShowCreateMedecin((v) => !v); setCreateError(""); setCreateSuccess(""); }} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs md:text-sm bg-primary text-primary-foreground hover:brightness-110 transition-all">
+                <button onClick={() => { setShowCreateMedecin((v) => !v); setCreateError(""); setCreateSuccess(""); }}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-xl text-xs md:text-sm bg-primary text-primary-foreground hover:brightness-110 transition-all">
                   {showCreateMedecin ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
                   <span>{showCreateMedecin ? "Fermer" : "Ajouter un médecin"}</span>
                 </button>
@@ -721,11 +645,12 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── DEMANDES ── */}
+          {/* ── DEMANDES MÉDECIN ── */}
           {tab === "demandes" && (
             <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               <div className="p-4 border-b border-border">
-                <h2 className="text-lg font-semibold text-card-foreground">Demandes patient → médecin</h2>
+                <h2 className="text-lg font-semibold text-card-foreground">Demandes médecin</h2>
+                <p className="text-xs text-muted-foreground mt-0.5">Demandes d'association patient → médecin</p>
               </div>
               {demandesLoading ? (
                 <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground"><Loader className="w-5 h-5 animate-spin" /><span className="text-sm">Chargement...</span></div>
@@ -756,19 +681,17 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── DEVICES ── */}
+          {/* ── DISPOSITIFS ── */}
           {tab === "devices" && (
             <div className="space-y-4">
-
-              {/* ── Header + Add button ── */}
               <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
                 <div className="p-4 border-b border-border flex items-center justify-between">
                   <div>
                     <h2 className="text-lg font-semibold text-card-foreground flex items-center gap-2">
-                      <Cpu className="w-5 h-5 text-primary" /> Gestion des Capteurs
+                      <Cpu className="w-5 h-5 text-primary" /> Gestion des Dispositifs
                     </h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {devices?.length ?? 0} capteur(s) enregistré(s) ·{" "}
+                      {devices?.length ?? 0} dispositif(s) enregistré(s) ·{" "}
                       {(devices || []).filter(d => d.patient_nom === "Non assigné").length} libre(s)
                     </p>
                   </div>
@@ -776,25 +699,21 @@ const AdminDashboard = () => {
                     onClick={() => { setShowAddDevice(v => !v); setAddDeviceError(""); setAddDeviceSuccess(""); }}
                     className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm bg-primary text-primary-foreground hover:brightness-110 transition-all">
                     {showAddDevice ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                    {showAddDevice ? "Fermer" : "Ajouter un capteur"}
+                    {showAddDevice ? "Fermer" : "Ajouter un dispositif"}
                   </button>
                 </div>
 
-                {/* ── Add device form ── */}
                 {showAddDevice && (
                   <div className="p-4 border-b border-border bg-muted/40">
                     <p className="text-sm text-muted-foreground mb-3">
-                      Un UUID sera généré automatiquement pour identifier le bracelet dans le système.
+                      Un UUID sera généré automatiquement pour identifier le dispositif dans le système.
                     </p>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleAddDevice}
-                        disabled={addDeviceLoading}
+                      <button onClick={handleAddDevice} disabled={addDeviceLoading}
                         className="flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
                         {addDeviceLoading
                           ? <><Loader className="w-4 h-4 animate-spin" /> Création...</>
-                          : <><RefreshCw className="w-4 h-4" /> Générer un nouveau capteur</>
-                        }
+                          : <><RefreshCw className="w-4 h-4" /> Générer un nouveau dispositif</>}
                       </button>
                       {addDeviceSuccess && <span className="text-xs text-green-600 font-mono">{addDeviceSuccess}</span>}
                       {addDeviceError && <span className="text-xs text-destructive">{addDeviceError}</span>}
@@ -803,19 +722,18 @@ const AdminDashboard = () => {
                 )}
               </div>
 
-              {/* ── Devices list ── */}
               {devicesLoading && (
                 <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
                   <Loader className="w-5 h-5 animate-spin" />
-                  <span className="text-sm">Chargement des capteurs...</span>
+                  <span className="text-sm">Chargement des dispositifs...</span>
                 </div>
               )}
 
               {!devicesLoading && devices?.length === 0 && (
                 <div className="bg-card border border-border rounded-2xl p-12 text-center">
                   <Cpu className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
-                  <p className="text-sm text-muted-foreground">Aucun capteur enregistré.</p>
-                  <p className="text-xs text-muted-foreground mt-1">Cliquez sur "Ajouter un capteur" pour commencer.</p>
+                  <p className="text-sm text-muted-foreground">Aucun dispositif enregistré.</p>
+                  <p className="text-xs text-muted-foreground mt-1">Cliquez sur "Ajouter un dispositif" pour commencer.</p>
                 </div>
               )}
 
@@ -832,22 +750,17 @@ const AdminDashboard = () => {
                           <span className="font-mono text-xs font-semibold text-card-foreground truncate max-w-[140px]">{d.id}</span>
                         </div>
                         <div className="flex items-center gap-2">
-                          {/* ✅ Badge libre/assigné */}
                           {isFree
                             ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600">Libre</span>
-                            : <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">Assigné</span>
-                          }
+                            : <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600">Assigné</span>}
                           {d.actif
                             ? <div className="flex items-center gap-1 text-green-600 text-xs"><Wifi className="w-3 h-3" /> En ligne</div>
-                            : <div className="flex items-center gap-1 text-muted-foreground text-xs"><WifiOff className="w-3 h-3" /> Hors ligne</div>
-                          }
+                            : <div className="flex items-center gap-1 text-muted-foreground text-xs"><WifiOff className="w-3 h-3" /> Hors ligne</div>}
                         </div>
                       </div>
-
                       <p className="text-sm text-muted-foreground mb-3">
                         Patient lié : <span className="text-card-foreground font-medium">{d.patient_nom}</span>
                       </p>
-
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-1 text-sm">
                           <Battery className={`w-4 h-4 ${d.niveau_batterie !== null && d.niveau_batterie < 30 ? "text-red-500" : "text-green-500"}`} />
@@ -861,21 +774,14 @@ const AdminDashboard = () => {
                           ))}
                         </div>
                       </div>
-
                       <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
                         <span className="text-xs text-muted-foreground">
                           Dernière transmission : {getLastSync(d.dernier_signal)}
                         </span>
-                        {/* ✅ Supprimer seulement si libre */}
                         {isFree && (
-                          <button
-                            onClick={() => handleDeleteDevice(d.id)}
-                            disabled={deleteDeviceLoading === d.id}
+                          <button onClick={() => handleDeleteDevice(d.id)} disabled={deleteDeviceLoading === d.id}
                             className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs text-destructive hover:bg-destructive/10 transition-all disabled:opacity-50">
-                            {deleteDeviceLoading === d.id
-                              ? <Loader className="w-3 h-3 animate-spin" />
-                              : <Trash2 className="w-3 h-3" />
-                            }
+                            {deleteDeviceLoading === d.id ? <Loader className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
                             Supprimer
                           </button>
                         )}
@@ -887,7 +793,7 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── LOGS ── */}
+          {/* ── JOURNAUX ── */}
           {tab === "logs" && (
             <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
               {logsLoading ? (
@@ -918,7 +824,7 @@ const AdminDashboard = () => {
             </div>
           )}
 
-          {/* ── SYSTEM ── */}
+          {/* ── SYSTÈME ── */}
           {tab === "system" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
@@ -933,7 +839,7 @@ const AdminDashboard = () => {
                 <div className="md:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
                     { label: "Utilisateurs total", value: systemStats.totalUsers },
-                    { label: "Capteurs enregistrés", value: systemStats.totalDevices },
+                    { label: "Dispositifs enregistrés", value: systemStats.totalDevices },
                     { label: "Alertes (24h)", value: systemStats.alertes24h },
                     { label: "Mesures (24h)", value: systemStats.vitals24h },
                   ].map((s, i) => (

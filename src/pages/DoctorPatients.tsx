@@ -33,6 +33,7 @@ interface Demande {
     id: string;
     date_naissance: string | null;
     maladies: string[];
+    medecin_id: string | null; // ancien médecin — nécessaire pour notifier
     utilisateurs: { nom: string; prenom: string; telephone: string | null } | null;
   } | null;
 }
@@ -105,7 +106,8 @@ const DoctorPatients = () => {
       const pIds = demandesRaw.map((d: any) => d.patient_id);
       const { data: patientsInfo } = await supabase
         .from("patients")
-        .select("id, date_naissance, maladies, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
+        // ← on inclut medecin_id pour savoir qui notifier
+        .select("id, date_naissance, maladies, medecin_id, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
         .in("id", pIds);
       const merged = demandesRaw.map((d: any) => ({
         ...d,
@@ -188,30 +190,97 @@ const DoctorPatients = () => {
     if (convId) navigate(`/doctor/messages?conversation=${convId}`);
   };
 
-  const handleDemande = async (demandeId: string, patientRowId: string, action: "approuvee" | "refusee") => {
+  // ─────────────────────────────────────────────────────────────────────────────
+  // Accepter / Refuser une demande de changement de médecin
+  // ─────────────────────────────────────────────────────────────────────────────
+  const handleDemande = async (
+    demandeId: string,
+    patientRow: Demande["patients"],
+    action: "approuvee" | "refusee"
+  ) => {
+    if (!patientRow) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    // 1. Mettre à jour le statut de la demande
     const { error: errDemande } = await supabase
       .from("demandes")
       .update({ statut: action, updated_at: new Date().toISOString() })
       .eq("id", demandeId);
+
     if (errDemande) {
       toast.error("Impossible de mettre à jour la demande.");
       return;
     }
+
     if (action === "approuvee") {
-      const { data: { user } } = await supabase.auth.getUser();
+      const ancienMedecinId = patientRow.medecin_id; // peut être null (1er médecin)
+
+      // 2. Récupérer les infos de l'ancien médecin pour l'email (avant de l'écraser)
+      let ancienMedecinEmail: string | null = null;
+      let ancienMedecinNom: string | null = null;
+      if (ancienMedecinId) {
+        const { data: ancienMed } = await supabase
+          .from("utilisateurs")
+          .select("email, nom, prenom")
+          .eq("id", ancienMedecinId)
+          .single();
+        if (ancienMed) {
+          ancienMedecinEmail = ancienMed.email;
+          ancienMedecinNom = `${ancienMed.prenom || ""} ${ancienMed.nom || ""}`.trim();
+        }
+      }
+
+      // 3. Récupérer les infos du patient pour l'email
+      const patientNom = [
+        patientRow.utilisateurs?.prenom,
+        patientRow.utilisateurs?.nom,
+      ].filter(Boolean).join(" ") || "—";
+
+      // 4. Assigner le nouveau médecin au patient
       const { error: errPatient } = await supabase
         .from("patients")
-        .update({ medecin_id: user?.id, updated_at: new Date().toISOString() })
-        .eq("id", patientRowId);
+        .update({ medecin_id: user.id, updated_at: new Date().toISOString() })
+        .eq("id", patientRow.id);
+
       if (errPatient) {
         toast.error("Demande acceptée mais le lien médecin n'a pas été enregistré.");
-      } else {
-        toast.success("Patient ajouté à votre liste.");
-        await loadPatients();
+        return;
       }
+
+      // 5. Notifier l'ancien médecin par email (si il y en avait un)
+      if (ancienMedecinId && ancienMedecinEmail) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-doctor-detached`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session?.access_token}`,
+              },
+              body: JSON.stringify({
+                ancienMedecinEmail,
+                ancienMedecinNom,
+                patientNom,
+              }),
+            }
+          );
+        } catch (e) {
+          // Ne pas bloquer le flux si l'email échoue
+          console.error("Erreur envoi email détachement :", e);
+        }
+      }
+
+      toast.success("Patient ajouté à votre liste.");
+      await loadPatients();
     } else {
-      toast.success("Demande refusée.");
+      // Refus : rien ne change pour le patient, on informe juste le médecin
+      toast.success("Demande refusée. Le patient conserve son médecin actuel.");
     }
+
+    // Retirer la demande de la liste locale
     setDemandes((prev) => prev.filter((d) => d.id !== demandeId));
   };
 
@@ -267,7 +336,6 @@ const DoctorPatients = () => {
               exit={{ opacity: 0 }}
               className="grid grid-cols-1 lg:grid-cols-3 gap-6"
             >
-              {/* List column */}
               <div className={`${selectedPatient ? "lg:col-span-1" : "lg:col-span-3"} space-y-4`}>
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
@@ -305,16 +373,9 @@ const DoctorPatients = () => {
                     Aucun patient trouvé
                   </div>
                 ) : (
-                  <div
-                    className={`${
-                      selectedPatient
-                        ? "space-y-2"
-                        : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
-                    }`}
-                  >
+                  <div className={`${selectedPatient ? "space-y-2" : "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"}`}>
                     {filtered.map((p) => {
-                      const initials =
-                        `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?";
+                      const initials = `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?";
                       return (
                         <motion.button
                           key={p.id}
@@ -322,9 +383,7 @@ const DoctorPatients = () => {
                           animate={{ opacity: 1 }}
                           onClick={() => setSelectedPatient(p)}
                           className={`w-full bg-card border rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:shadow-md ${
-                            selectedPatient?.id === p.id
-                              ? "border-primary ring-1 ring-primary/20"
-                              : "border-border"
+                            selectedPatient?.id === p.id ? "border-primary ring-1 ring-primary/20" : "border-border"
                           }`}
                         >
                           <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0">
@@ -339,24 +398,12 @@ const DoctorPatients = () => {
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <button
-                              type="button"
-                              onClick={(e) => handleStartConversation(p.id, e)}
-                              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
-                              title="Envoyer un message"
-                            >
+                            <button type="button" onClick={(e) => handleStartConversation(p.id, e)}
+                              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors" title="Envoyer un message">
                               <MessageCircle className="w-4 h-4" />
                             </button>
-                            {/* ── Voir la fiche ── */}
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                navigate(`/doctor/patients/${p.id}`);
-                              }}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                              title="Voir la fiche complète"
-                            >
+                            <button type="button" onClick={(e) => { e.stopPropagation(); navigate(`/doctor/patients/${p.id}`); }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Voir la fiche complète">
                               <FileText className="w-4 h-4" />
                             </button>
                             <StatusBadge status={p.status as any} size="sm" />
@@ -368,13 +415,8 @@ const DoctorPatients = () => {
                 )}
               </div>
 
-              {/* Patient detail panel */}
               {selectedPatient && (
-                <motion.div
-                  initial={{ opacity: 0, x: 20 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  className="lg:col-span-2 space-y-4"
-                >
+                <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="lg:col-span-2 space-y-4">
                   <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -386,25 +428,17 @@ const DoctorPatients = () => {
                             {[selectedPatient.prenom, selectedPatient.nom].filter(Boolean).join(" ")}
                           </h2>
                           <p className="text-sm text-muted-foreground">
-                            {age(selectedPatient.date_naissance)} ans •{" "}
-                            {selectedPatient.maladies?.[0] || "—"}
+                            {age(selectedPatient.date_naissance)} ans • {selectedPatient.maladies?.[0] || "—"}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* ── Voir la fiche complète ── */}
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/doctor/patients/${selectedPatient.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-                        >
+                        <button type="button" onClick={() => navigate(`/doctor/patients/${selectedPatient.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
                           <FileText className="w-4 h-4" /> Fiche complète
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleStartConversation(selectedPatient.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
-                        >
+                        <button type="button" onClick={() => handleStartConversation(selectedPatient.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors">
                           <MessageCircle className="w-4 h-4" /> Envoyer un message
                         </button>
                         <StatusBadge status={selectedPatient.status as any} size="md" />
@@ -466,10 +500,7 @@ const DoctorPatients = () => {
                     </button>
                   </div>
 
-                  <button
-                    onClick={() => setSelectedPatient(null)}
-                    className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => setSelectedPatient(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                     ← Retour à la liste
                   </button>
                 </motion.div>
@@ -478,13 +509,7 @@ const DoctorPatients = () => {
           )}
 
           {section === "demandes" && (
-            <motion.div
-              key="demandes"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="space-y-3"
-            >
+            <motion.div key="demandes" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
               {loadingDemandes ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader className="w-6 h-6 text-primary animate-spin" />
@@ -504,18 +529,28 @@ const DoctorPatients = () => {
                       ? Math.floor((Date.now() - new Date(d.patients.date_naissance).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
                       : null;
                     const maladies = d.patients?.maladies ?? [];
+                    const isChangement = !!d.patients?.medecin_id; // a déjà un médecin
+
                     return (
-                      <motion.div
-                        key={d.id}
-                        initial={{ opacity: 0, y: 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-start gap-4"
-                      >
+                      <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                        className="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-start gap-4">
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0 text-sm">
                           {fullName !== "—" ? fullName.charAt(0) : "?"}
                         </div>
                         <div className="flex-1 min-w-0 space-y-1.5">
-                          <p className="text-sm font-semibold text-foreground">{fullName}</p>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-semibold text-foreground">{fullName}</p>
+                            {/* Badge indiquant s'il s'agit d'un changement ou d'une première assignation */}
+                            {isChangement ? (
+                              <span className="text-xs bg-yellow-500/10 text-yellow-600 px-2 py-0.5 rounded-full border border-yellow-500/20">
+                                Changement de médecin
+                              </span>
+                            ) : (
+                              <span className="text-xs bg-blue-500/10 text-blue-600 px-2 py-0.5 rounded-full border border-blue-500/20">
+                                Nouveau patient
+                              </span>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
                             {ageVal != null && <span>🎂 {ageVal} ans</span>}
                             <span>📞 {u?.telephone || "—"}</span>
@@ -531,13 +566,13 @@ const DoctorPatients = () => {
                         </div>
                         <div className="flex gap-2 flex-shrink-0">
                           <button
-                            onClick={() => handleDemande(d.id, d.patients?.id!, "approuvee")}
+                            onClick={() => handleDemande(d.id, d.patients, "approuvee")}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-green-500/10 text-green-600 rounded-xl text-xs font-medium hover:bg-green-500/20 transition-all"
                           >
                             <CheckCircle className="w-3.5 h-3.5" /> Accepter
                           </button>
                           <button
-                            onClick={() => handleDemande(d.id, d.patients?.id!, "refusee")}
+                            onClick={() => handleDemande(d.id, d.patients, "refusee")}
                             className="flex items-center gap-1.5 px-3 py-1.5 bg-destructive/10 text-destructive rounded-xl text-xs font-medium hover:bg-destructive/20 transition-all"
                           >
                             <XCircle className="w-3.5 h-3.5" /> Refuser

@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
@@ -6,26 +6,29 @@ import {
   Battery, MapPin, AlertTriangle, Clock, User, Phone,
   Home, Stethoscope, FileText, Users, Wifi, WifiOff,
   ChevronRight, Save, Loader, CheckCircle, TrendingUp,
-  Shield, Zap, Video, Calendar, X, Plus, ExternalLink,
-  Check, MessageSquare, XCircle,
+  Shield, Zap, Video, Calendar, X, Plus, ExternalLink, Check,
+  Bell, CalendarClock, RefreshCw,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
-import LiveECGChart from "@/components/LiveECGChart";
+import VitalCard from "@/components/VitalCard";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
-import { format, formatDistanceToNow } from "date-fns";
+import { format, formatDistanceToNow, startOfDay, addDays, getDay } from "date-fns";
 import { fr } from "date-fns/locale";
 import {
   LineChart, Line, ResponsiveContainer, XAxis, YAxis,
   Tooltip, CartesianGrid, ReferenceLine
 } from "recharts";
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
 interface PatientFiche {
   id: string; user_id: string; nom: string; prenom: string;
   email: string; telephone: string; sexe: string | null;
   date_naissance: string; adresse: string; maladies: string[];
-  antecedents: string; traitements: string[]; notes_medecin: string; status: string;
+  antecedents: string; traitements: string[]; notes_medecin: string;
+  status: string; consultation_day: number | null;
 }
 interface Device { id: string; actif: boolean; dernier_signal: string | null; }
 interface VitalSign {
@@ -36,34 +39,112 @@ interface VitalSign {
 interface Alert { id: string; severity: string; type: string; message: string; resolved: boolean; created_at: string; }
 interface Anomalie { id: string; type_anomalie: string; score_confiance: number | null; detected_at: string; }
 interface Proche { proche_id: string; nom: string; prenom: string; telephone: string | null; email: string | null; }
-
 interface Consultation {
-  id: string;
-  zoom_link: string;
-  scheduled_at: string;
-  status: "planifiee" | "terminee" | "annulee";
-  notes: string | null;
-  demande_patient: boolean;
-  message_patient: string | null;
-  created_at: string;
+  id: string; zoom_link: string; scheduled_at: string;
+  status: "planifiee" | "terminee" | "annulee"; notes: string | null; created_at: string;
 }
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const JOURS = [
+  { label: "Dimanche", short: "Dim" },
+  { label: "Lundi",    short: "Lun" },
+  { label: "Mardi",    short: "Mar" },
+  { label: "Mercredi", short: "Mer" },
+  { label: "Jeudi",    short: "Jeu" },
+  { label: "Vendredi", short: "Ven" },
+  { label: "Samedi",   short: "Sam" },
+];
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const age = (dob: string) => {
   if (!dob) return "—";
   return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
 };
+
 const severityColor: Record<string, string> = {
   CRITICAL: "text-red-500 bg-red-500/10 border-red-500/20",
   HIGH:     "text-orange-500 bg-orange-500/10 border-orange-500/20",
   MEDIUM:   "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
   LOW:      "text-green-500 bg-green-500/10 border-green-500/20",
 };
+
 const batteryColor = (level: number | null) => {
   if (!level) return "text-muted-foreground";
   if (level > 60) return "text-green-500";
   if (level > 30) return "text-yellow-500";
   return "text-red-500";
 };
+
+const getNextOccurrence = (targetDay: number): Date => {
+  const today = new Date();
+  const todayDay = getDay(today);
+  const diff = (targetDay - todayDay + 7) % 7;
+  return startOfDay(addDays(today, diff === 0 ? 0 : diff));
+};
+
+const getLastOccurrence = (targetDay: number): Date => {
+  const now = new Date();
+  const todayUTCDay = now.getUTCDay();
+  const diff = (todayUTCDay - targetDay + 7) % 7;
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - diff));
+};
+
+const toUTCDateStr = (date: Date): string =>
+  `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}-${String(date.getUTCDate()).padStart(2, "0")}`;
+
+const isConsultationOverdue = (consultationDay: number | null, consultations: Consultation[]): boolean => {
+  if (consultationDay === null) return false;
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+  const lastOccurrence = getLastOccurrence(consultationDay);
+  if (lastOccurrence.getTime() === todayUTC.getTime()) return false;
+  const nextOccurrence = new Date(lastOccurrence.getTime() + 7 * 24 * 60 * 60 * 1000);
+  const hasConsult = consultations.some((c) => {
+    if (c.status === "annulee") return false;
+    const d = new Date(c.scheduled_at);
+    const dUTC = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    return dUTC.getTime() >= lastOccurrence.getTime() && dUTC.getTime() <= nextOccurrence.getTime();
+  });
+  return !hasConsult;
+};
+
+const isNextOccurrencePlanned = (consultationDay: number | null, consultations: Consultation[]): boolean => {
+  if (consultationDay === null) return false;
+  const nextOcc = getNextOccurrence(consultationDay);
+  const nextOccStr = toUTCDateStr(new Date(Date.UTC(nextOcc.getFullYear(), nextOcc.getMonth(), nextOcc.getDate())));
+  return consultations.some((c) => {
+    if (c.status === "annulee") return false;
+    const d = new Date(c.scheduled_at);
+    return toUTCDateStr(new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()))) === nextOccStr;
+  });
+};
+
+// ─── Vital helpers (même logique que PatientVitals) ──────────────────────────
+
+const getBpmStatus = (v: number | null): "safe" | "warning" | "critical" => {
+  if (!v) return "safe";
+  if (v > 120 || v < 40) return "critical";
+  if (v > 100 || v < 50) return "warning";
+  return "safe";
+};
+
+const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => {
+  if (!v) return "safe";
+  if (v < 90) return "critical";
+  if (v < 95) return "warning";
+  return "safe";
+};
+
+const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => {
+  if (!v) return "safe";
+  if (v > 39.5 || v < 35) return "critical";
+  if (v > 37.5) return "warning";
+  return "safe";
+};
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
 
 const Section = ({ title, icon, children, className = "", action }: {
   title: string; icon: React.ReactNode; children: React.ReactNode;
@@ -93,69 +174,79 @@ const VitalMini = ({ icon, label, value, unit, color = "text-foreground" }: {
   </div>
 );
 
-const consultationStatusBadge = (c: Consultation) => {
-  if (c.demande_patient && c.zoom_link === "en_attente")
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-600">Demande patient</span>;
-  if (c.status === "planifiee")
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">Planifiée</span>;
-  if (c.status === "terminee")
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">Terminée</span>;
-  if (c.status === "annulee")
-    return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600">Annulée</span>;
+const consultationStatusBadge = (status: string) => {
+  if (status === "planifiee") return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">Planifiée</span>;
+  if (status === "terminee")  return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">Terminée</span>;
+  if (status === "annulee")   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600">Annulée</span>;
   return null;
 };
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 
 const DoctorPatientFiche = () => {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
 
-  const [patient, setPatient]           = useState<PatientFiche | null>(null);
-  const [device, setDevice]             = useState<Device | null>(null);
-  const [latestVital, setLatestVital]   = useState<VitalSign | null>(null);
+  const [patient, setPatient]             = useState<PatientFiche | null>(null);
+  const [device, setDevice]               = useState<Device | null>(null);
+  const [latestVital, setLatestVital]     = useState<VitalSign | null>(null);
   const [vitalsHistory, setVitalsHistory] = useState<VitalSign[]>([]);
-  const [alerts, setAlerts]             = useState<Alert[]>([]);
-  const [anomalies, setAnomalies]       = useState<Anomalie[]>([]);
-  const [proches, setProches]           = useState<Proche[]>([]);
-  const [notes, setNotes]               = useState("");
-  const [savingNotes, setSavingNotes]   = useState(false);
-  const [notesSaved, setNotesSaved]     = useState(false);
-  const [loading, setLoading]           = useState(true);
+  const [alerts, setAlerts]               = useState<Alert[]>([]);
+  const [anomalies, setAnomalies]         = useState<Anomalie[]>([]);
+  const [proches, setProches]             = useState<Proche[]>([]);
+  const [notes, setNotes]                 = useState("");
+  const [savingNotes, setSavingNotes]     = useState(false);
+  const [notesSaved, setNotesSaved]       = useState(false);
+  const [loading, setLoading]             = useState(true);
   const [activeVitalTab, setActiveVitalTab] = useState<"bpm" | "spo2" | "temperature">("bpm");
-
-  // ── Consultation states ──
-  const [consultations, setConsultations]     = useState<Consultation[]>([]);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [showConsultForm, setShowConsultForm] = useState(false);
   const [consultLoading, setConsultLoading]   = useState(false);
   const [consultForm, setConsultForm] = useState({ zoom_link: "", scheduled_at: "", notes: "" });
+  const [consultationDay, setConsultationDay]     = useState<number | null>(null);
+  const [savingConsultDay, setSavingConsultDay]   = useState(false);
+  const [editingConsultDay, setEditingConsultDay] = useState(false);
+  const [selectedDay, setSelectedDay]             = useState<number | null>(null);
+  const [overdueAlertSent, setOverdueAlertSent]   = useState(false);
 
-  // ── Réponse à une demande patient ──
-  const [repondreId, setRepondreId]         = useState<string | null>(null);
-  const [repondreZoom, setRepondreZoom]     = useState("");
-  const [repondreLoading, setRepondreLoading] = useState(false);
+  // ── Realtime vitals (nouveaux) ──
+  const [deviceId, setDeviceId] = useState<string | null>(null);
+  const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
-  const loadConsultations = async (pid: string) => {
+  const consultSectionRef = useRef<HTMLDivElement>(null);
+
+  const openConsultForm = () => {
+    setShowConsultForm(true);
+    setTimeout(() => consultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  };
+
+  // ─── Load consultations ──────────────────────────────────────────────────────
+
+  const loadConsultations = async (pid: string): Promise<Consultation[]> => {
     const { data } = await supabase
       .from("consultations")
-      .select("id, zoom_link, scheduled_at, status, notes, demande_patient, message_patient, created_at")
+      .select("id, zoom_link, scheduled_at, status, notes, created_at")
       .eq("patient_id", pid)
       .order("scheduled_at", { ascending: false })
       .limit(10);
-    setConsultations((data as Consultation[]) || []);
+    const result = (data as Consultation[]) || [];
+    setConsultations(result);
+    return result;
   };
+
+  // ─── Main data loader ────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     if (!patientId) return;
-
     const { data: p } = await supabase
       .from("patients")
-      .select(`id, user_id, maladies, date_naissance, adresse, antecedents, traitements, notes_medecin, status,
+      .select(`id, user_id, maladies, date_naissance, adresse, antecedents, traitements,
+               notes_medecin, status, consultation_day,
                utilisateurs!patients_user_id_fkey(nom, prenom, email, telephone, sexe)`)
       .eq("id", patientId).single();
-
     if (!p) { navigate("/doctor/patients"); return; }
-
     const u = p.utilisateurs as any;
-    setPatient({
+    const patientData: PatientFiche = {
       id: p.id, user_id: p.user_id,
       nom: u?.nom || "", prenom: u?.prenom || "",
       email: u?.email || "", telephone: u?.telephone || "",
@@ -163,8 +254,12 @@ const DoctorPatientFiche = () => {
       adresse: p.adresse || "", maladies: p.maladies || [],
       antecedents: p.antecedents || "", traitements: p.traitements || [],
       notes_medecin: p.notes_medecin || "", status: p.status || "offline",
-    });
+      consultation_day: p.consultation_day ?? null,
+    };
+    setPatient(patientData);
     setNotes(p.notes_medecin || "");
+    setConsultationDay(p.consultation_day ?? null);
+    setSelectedDay(p.consultation_day ?? null);
 
     const { data: devData } = await supabase
       .from("devices").select("id, actif, dernier_signal")
@@ -172,16 +267,22 @@ const DoctorPatientFiche = () => {
     setDevice(devData as Device | null);
 
     if (devData) {
-      const { data: vLatest } = await supabase
+      setDeviceId(devData.id);
+
+      // Dernières 20 mesures (même que PatientVitals)
+      const { data: vData } = await supabase
         .from("vital_signs")
         .select("id, bpm, spo2, temperature, niveau_batterie, chute, latitude, longitude, recorded_at")
-        .eq("device_id", devData.id).order("recorded_at", { ascending: false }).limit(1).maybeSingle();
-      setLatestVital(vLatest as VitalSign | null);
+        .eq("device_id", devData.id)
+        .order("recorded_at", { ascending: false })
+        .limit(20);
 
-      const { data: vHistory } = await supabase
-        .from("vital_signs").select("id, bpm, spo2, temperature, recorded_at")
-        .eq("device_id", devData.id).order("recorded_at", { ascending: true }).limit(50);
-      setVitalsHistory((vHistory as VitalSign[]) || []);
+      if (vData && vData.length > 0) {
+        const reversed = [...vData].reverse();
+        setVitalsHistory(reversed as VitalSign[]);
+        setLatestVital(reversed[reversed.length - 1] as VitalSign);
+        setLastUpdate(new Date());
+      }
     }
 
     const { data: aData } = await supabase
@@ -198,21 +299,92 @@ const DoctorPatientFiche = () => {
       .from("proche_patient")
       .select("proche_id, utilisateurs!proche_patient_proche_id_fkey(nom, prenom, email, telephone)")
       .eq("patient_id", p.user_id);
-    setProches(
-      (ppData || []).map((pp: any) => {
-        const pu = Array.isArray(pp.utilisateurs) ? pp.utilisateurs[0] : pp.utilisateurs;
-        return { proche_id: pp.proche_id, nom: pu?.nom || "", prenom: pu?.prenom || "",
-                 telephone: pu?.telephone || null, email: pu?.email || null };
-      })
-    );
+    setProches((ppData || []).map((pp: any) => {
+      const pu = Array.isArray(pp.utilisateurs) ? pp.utilisateurs[0] : pp.utilisateurs;
+      return { proche_id: pp.proche_id, nom: pu?.nom || "", prenom: pu?.prenom || "",
+               telephone: pu?.telephone || null, email: pu?.email || null };
+    }));
 
-    await loadConsultations(patientId);
+    const consults = await loadConsultations(patientId);
+    const cDay = p.consultation_day ?? null;
+    if (cDay !== null && isConsultationOverdue(cDay, consults)) {
+      await sendOverdueAlert(p.id, u?.nom, u?.prenom, cDay);
+    }
+
     setLoading(false);
   }, [patientId, navigate]);
 
   useEffect(() => { load(); }, [load]);
 
-  // ── Planifier une consultation (médecin initie) ──
+  // ─── Realtime vitals subscription ────────────────────────────────────────────
+
+  useEffect(() => {
+    if (!deviceId) return;
+
+    const channel = supabase
+      .channel(`doctor_fiche_vitals_${deviceId}`)
+      .on("postgres_changes", {
+        event: "INSERT",
+        schema: "public",
+        table: "vital_signs",
+        filter: `device_id=eq.${deviceId}`,
+      }, (payload) => {
+        const newVital = payload.new as VitalSign;
+        setLatestVital(newVital);
+        setLastUpdate(new Date());
+        setVitalsHistory(prev => [...prev.slice(-19), newVital]);
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [deviceId]);
+
+  // ─── Overdue alert ───────────────────────────────────────────────────────────
+
+  const sendOverdueAlert = async (pid: string, nom: string, prenom: string, cDay: number) => {
+    if (overdueAlertSent) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const now = new Date();
+    const startOfToday = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())).toISOString();
+    const { data: existing } = await supabase.from("notifications").select("id")
+      .eq("user_id", user.id).eq("title", "Consultation en retard").gte("created_at", startOfToday).maybeSingle();
+    if (existing) return;
+    await supabase.from("notifications").insert({
+      user_id: user.id,
+      title: "Consultation en retard",
+      message: `La consultation hebdomadaire du ${JOURS[cDay].label} pour ${prenom} ${nom} n'a pas encore été planifiée.`,
+      read: false,
+    });
+    setOverdueAlertSent(true);
+    toast.warning(`⚠️ Consultation du ${JOURS[cDay].label} non planifiée pour ${prenom} ${nom}`);
+  };
+
+  // ─── Save consultation day ────────────────────────────────────────────────────
+
+  const handleSaveConsultationDay = async () => {
+    if (!patient || selectedDay === null) return;
+    setSavingConsultDay(true);
+    const { error } = await supabase.from("patients")
+      .update({ consultation_day: selectedDay, updated_at: new Date().toISOString() }).eq("id", patient.id);
+    if (!error) {
+      setConsultationDay(selectedDay);
+      setEditingConsultDay(false);
+      toast.success(`Jour de consultation défini : ${JOURS[selectedDay].label}`);
+      await supabase.from("notifications").insert({
+        user_id: patient.user_id,
+        title: "Planning de consultations mis à jour",
+        message: `Votre médecin a défini le ${JOURS[selectedDay].label} comme votre jour de consultation hebdomadaire.`,
+        read: false,
+      });
+    } else {
+      toast.error("Erreur lors de la sauvegarde");
+    }
+    setSavingConsultDay(false);
+  };
+
+  // ─── Consultation CRUD ────────────────────────────────────────────────────────
+
   const handlePlanifierConsultation = async () => {
     if (!patient || !consultForm.zoom_link || !consultForm.scheduled_at) {
       toast.error("Lien Zoom et date/heure sont obligatoires."); return;
@@ -228,16 +400,12 @@ const DoctorPatientFiche = () => {
         patient_id: patient.id, medecin_id: user.id,
         zoom_link: consultForm.zoom_link.trim(),
         scheduled_at: new Date(consultForm.scheduled_at).toISOString(),
-        notes: consultForm.notes.trim() || null,
-        status: "planifiee", demande_patient: false,
+        notes: consultForm.notes.trim() || null, status: "planifiee",
       });
       if (error) throw error;
       await supabase.from("notifications").insert({
-        user_id: patient.user_id,
-        title: "Consultation planifiée",
-        message: `Votre médecin a planifié une consultation vidéo le ${format(
-          new Date(consultForm.scheduled_at), "dd MMMM yyyy à HH:mm", { locale: fr }
-        )}.`,
+        user_id: patient.user_id, title: "Consultation planifiée",
+        message: `Votre médecin a planifié une consultation vidéo le ${format(new Date(consultForm.scheduled_at), "dd MMMM yyyy à HH:mm", { locale: fr })}.`,
         read: false,
       });
       toast.success("Consultation planifiée et patient notifié !");
@@ -251,110 +419,44 @@ const DoctorPatientFiche = () => {
     }
   };
 
-  // ── Accepter une demande patient (ajouter le lien Zoom) ──
-  const handleAccepterDemande = async (consultationId: string) => {
-    if (!repondreZoom.startsWith("http")) {
-      toast.error("Le lien Zoom doit commencer par http:// ou https://"); return;
-    }
-    if (!patient) return;
-    setRepondreLoading(true);
-    try {
-      const { error } = await supabase
-        .from("consultations")
-        .update({
-          zoom_link: repondreZoom.trim(),
-          status: "planifiee",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", consultationId);
-      if (error) throw error;
-
-      // Notifier le patient
-      await supabase.from("notifications").insert({
-        user_id: patient.user_id,
-        title: "Consultation confirmée ✅",
-        message: `Votre médecin a confirmé votre demande de consultation. Le lien Zoom est disponible dans votre espace consultation.`,
-        read: false,
-      });
-
-      toast.success("Demande acceptée, patient notifié !");
-      setRepondreId(null);
-      setRepondreZoom("");
-      await loadConsultations(patient.id);
-    } catch (err: any) {
-      toast.error("Erreur : " + err.message);
-    } finally {
-      setRepondreLoading(false);
-    }
+  const handleTerminerConsultation = async (id: string) => {
+    const { error } = await supabase.from("consultations")
+      .update({ status: "terminee", updated_at: new Date().toISOString() }).eq("id", id);
+    if (!error) { toast.success("Consultation marquée comme terminée."); if (patient) await loadConsultations(patient.id); }
   };
 
-  // ── Refuser une demande patient ──
-  const handleRefuserDemande = async (consultationId: string) => {
-    if (!confirm("Confirmer le refus de cette demande ?") || !patient) return;
-    const { error } = await supabase
-      .from("consultations")
-      .update({ status: "annulee", updated_at: new Date().toISOString() })
-      .eq("id", consultationId);
-    if (!error) {
-      await supabase.from("notifications").insert({
-        user_id: patient.user_id,
-        title: "Demande de consultation refusée",
-        message: "Votre médecin n'est pas disponible à la date demandée. Vous pouvez faire une nouvelle demande.",
-        read: false,
-      });
-      toast.success("Demande refusée, patient notifié.");
-      await loadConsultations(patient.id);
-    }
-  };
-
-  const handleTerminerConsultation = async (consultationId: string) => {
-    const { error } = await supabase
-      .from("consultations")
-      .update({ status: "terminee", updated_at: new Date().toISOString() })
-      .eq("id", consultationId);
-    if (!error) {
-      toast.success("Consultation marquée comme terminée.");
-      if (patient) await loadConsultations(patient.id);
-    }
-  };
-
-  const handleAnnulerConsultation = async (consultationId: string) => {
+  const handleAnnulerConsultation = async (id: string) => {
     if (!confirm("Confirmer l'annulation ?")) return;
-    const { error } = await supabase
-      .from("consultations")
-      .update({ status: "annulee", updated_at: new Date().toISOString() })
-      .eq("id", consultationId);
-    if (!error) {
-      toast.success("Consultation annulée.");
-      if (patient) await loadConsultations(patient.id);
-    }
+    const { error } = await supabase.from("consultations")
+      .update({ status: "annulee", updated_at: new Date().toISOString() }).eq("id", id);
+    if (!error) { toast.success("Consultation annulée."); if (patient) await loadConsultations(patient.id); }
   };
+
+  // ─── Notes ───────────────────────────────────────────────────────────────────
 
   const handleSaveNotes = async () => {
     if (!patient) return;
     setSavingNotes(true);
-    const { error } = await supabase
-      .from("patients")
-      .update({ notes_medecin: notes, updated_at: new Date().toISOString() })
-      .eq("id", patient.id);
+    const { error } = await supabase.from("patients")
+      .update({ notes_medecin: notes, updated_at: new Date().toISOString() }).eq("id", patient.id);
     if (!error) { setNotesSaved(true); setTimeout(() => setNotesSaved(false), 3000); }
     else toast.error("Erreur lors de la sauvegarde");
     setSavingNotes(false);
   };
 
+  // ─── Messaging ───────────────────────────────────────────────────────────────
+
   const handleStartConversation = async () => {
     if (!patient) return;
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: existing } = await supabase
-      .from("conversations").select("id")
+    const { data: existing } = await supabase.from("conversations").select("id")
       .eq("patient_id", patient.id).eq("medecin_id", user.id).maybeSingle();
     let convId = (existing as any)?.id;
     if (!convId) {
-      const { data: inserted } = await supabase
-        .from("conversations").insert({ patient_id: patient.id, medecin_id: user.id })
-        .select("id").single();
-      convId = (inserted as any)?.id;
+      const { data: ins } = await supabase.from("conversations")
+        .insert({ patient_id: patient.id, medecin_id: user.id }).select("id").single();
+      convId = (ins as any)?.id;
     }
     if (convId) navigate(`/doctor/messages?conversation=${convId}`);
   };
@@ -362,60 +464,62 @@ const DoctorPatientFiche = () => {
   const handleMessageProche = async (procheId: string) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: existing } = await supabase
-      .from("family_conversations").select("id")
+    const { data: existing } = await supabase.from("family_conversations").select("id")
       .eq("proche_id", procheId).eq("medecin_id", user.id).maybeSingle();
     let convId = (existing as any)?.id;
     if (!convId) {
-      const { data: inserted } = await supabase
-        .from("family_conversations").insert({ proche_id: procheId, medecin_id: user.id })
-        .select("id").single();
-      convId = (inserted as any)?.id;
+      const { data: ins } = await supabase.from("family_conversations")
+        .insert({ proche_id: procheId, medecin_id: user.id }).select("id").single();
+      convId = (ins as any)?.id;
     }
     if (convId) navigate(`/doctor/messages?tab=proches&conversation=${convId}`);
   };
 
-  const chartData = vitalsHistory.map((v) => ({
-    time: format(new Date(v.recorded_at), "HH:mm", { locale: fr }),
-    bpm: v.bpm, spo2: v.spo2,
-    temperature: v.temperature ? Number(v.temperature) : null,
+  // ─── Derived data ─────────────────────────────────────────────────────────────
+
+  // Graphes — même format que PatientVitals
+  const chartData = vitalsHistory.map(v => ({
+    time: new Date(v.recorded_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
+    BPM: v.bpm,
+    SpO2: v.spo2,
+    Température: v.temperature,
   }));
 
   const vitalConfig = {
-    bpm:         { key: "bpm",         color: "#ef4444", label: "BPM",         unit: "bpm", ref: [60, 100] },
-    spo2:        { key: "spo2",        color: "#3b82f6", label: "SpO₂",        unit: "%",   ref: [95, 100] },
-    temperature: { key: "temperature", color: "#f97316", label: "Température", unit: "°C",  ref: [36, 37.5] },
+    bpm:         { key: "BPM",         color: "hsl(var(--primary))", label: "BPM",         unit: "bpm", ref: [60, 100] },
+    spo2:        { key: "SpO2",        color: "#3b82f6",             label: "SpO₂",        unit: "%",   ref: [95, 100] },
+    temperature: { key: "Température", color: "#f97316",             label: "Température", unit: "°C",  ref: [36, 37.5] },
   };
   const vc = vitalConfig[activeVitalTab];
 
-  // Nombre de demandes en attente
-  const demandesEnAttente = consultations.filter(
-    c => c.demande_patient && c.zoom_link === "en_attente"
-  ).length;
+  const overdue = isConsultationOverdue(consultationDay, consultations);
+  const nextOccurrencePlanned = isNextOccurrencePlanned(consultationDay, consultations);
+  const nextOccurrence = consultationDay !== null ? getNextOccurrence(consultationDay) : null;
+  const isToday = nextOccurrence ? nextOccurrence.toDateString() === new Date().toDateString() : false;
 
-  if (loading) {
-    return (
-      <DashboardLayout role="doctor">
-        <div className="flex items-center justify-center h-96">
-          <Loader className="w-8 h-8 text-primary animate-spin" />
-        </div>
-      </DashboardLayout>
-    );
-  }
+  const formatTime = (d: Date) =>
+    d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  if (loading) return (
+    <DashboardLayout role="doctor">
+      <div className="flex items-center justify-center h-96">
+        <Loader className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    </DashboardLayout>
+  );
 
   if (!patient) return null;
 
   const initials = `${patient.prenom?.[0] || ""}${patient.nom?.[0] || ""}`.toUpperCase() || "?";
   const fullName = [patient.prenom, patient.nom].filter(Boolean).join(" ") || "—";
   const isOnline = device?.actif && device?.dernier_signal
-    ? Date.now() - new Date(device.dernier_signal).getTime() < 5 * 60 * 1000
-    : false;
+    ? Date.now() - new Date(device.dernier_signal).getTime() < 5 * 60 * 1000 : false;
 
   return (
     <DashboardLayout role="doctor">
       <div className="max-w-7xl space-y-6">
 
-        {/* Header */}
+        {/* ── Header ── */}
         <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <button onClick={() => navigate("/doctor/patients")}
             className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
@@ -448,10 +552,52 @@ const DoctorPatientFiche = () => {
           </div>
         </motion.div>
 
+        {/* ── Bannières consultation ── */}
+        {consultationDay !== null && (() => {
+          if (overdue) return (
+            <motion.div key="overdue" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 px-5 py-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-600">
+              <Bell className="w-5 h-5 shrink-0 animate-pulse" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Consultation en retard !</p>
+                <p className="text-xs opacity-80 mt-0.5">La consultation du <strong>{JOURS[consultationDay].label}</strong> de cette semaine n'a pas encore été planifiée.</p>
+              </div>
+              <button onClick={openConsultForm} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white rounded-xl text-xs font-medium hover:bg-red-600 transition-colors shrink-0">
+                <Plus className="w-3.5 h-3.5" /> Planifier maintenant
+              </button>
+            </motion.div>
+          );
+          if (nextOccurrencePlanned && nextOccurrence) return (
+            <motion.div key="planned" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 px-5 py-3.5 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-600">
+              <CheckCircle className="w-5 h-5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Consultation planifiée ✓</p>
+                <p className="text-xs opacity-80 mt-0.5">Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}</p>
+              </div>
+            </motion.div>
+          );
+          if (nextOccurrence) return (
+            <motion.div key="upcoming" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+              className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border ${isToday ? "bg-orange-500/10 border-orange-500/30 text-orange-600" : "bg-blue-500/10 border-blue-500/30 text-blue-600"}`}>
+              <CalendarClock className="w-5 h-5 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold">{isToday ? "Consultation prévue aujourd'hui !" : "Prochaine consultation à planifier"}</p>
+                <p className="text-xs opacity-80 mt-0.5">Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "— n'oubliez pas de planifier la séance." : `— ${format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}`}</p>
+              </div>
+              <button onClick={openConsultForm} className="flex items-center gap-1.5 px-3 py-1.5 bg-current/20 rounded-xl text-xs font-medium hover:bg-current/30 transition-colors shrink-0">
+                <Plus className="w-3.5 h-3.5" /> Planifier
+              </button>
+            </motion.div>
+          );
+          return null;
+        })()}
+
+        {/* ── Main grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* LEFT */}
           <div className="space-y-5">
 
+            {/* Infos personnelles */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
               <Section title="Informations personnelles" icon={<User className="w-4 h-4" />}>
                 <div className="space-y-2 text-sm">
@@ -463,6 +609,7 @@ const DoctorPatientFiche = () => {
               </Section>
             </motion.div>
 
+            {/* Dossier médical */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
               <Section title="Dossier médical" icon={<Stethoscope className="w-4 h-4" />}>
                 <div className="space-y-3 text-sm">
@@ -474,6 +621,7 @@ const DoctorPatientFiche = () => {
               </Section>
             </motion.div>
 
+            {/* Proches */}
             <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
               <Section title={`Proches (${proches.length})`} icon={<Users className="w-4 h-4" />}>
                 {proches.length === 0 ? <p className="text-xs text-muted-foreground">Aucun proche lié</p> : (
@@ -499,40 +647,84 @@ const DoctorPatientFiche = () => {
               </Section>
             </motion.div>
 
-            {/* ── CONSULTATIONS ── */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
-              <Section
-                title={`Consultations vidéo${demandesEnAttente > 0 ? ` · ${demandesEnAttente} demande(s)` : ""}`}
-                icon={<Video className="w-4 h-4" />}
+            {/* Consultation hebdomadaire */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 }}>
+              <Section title="Consultation hebdomadaire" icon={<RefreshCw className="w-4 h-4" />}
                 action={
-                  <button onClick={() => setShowConsultForm((v) => !v)}
+                  <button onClick={() => { setEditingConsultDay(v => !v); setSelectedDay(consultationDay); }}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-muted-foreground transition-all">
+                    {editingConsultDay ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    {editingConsultDay ? "Annuler" : (consultationDay !== null ? "Modifier" : "Définir")}
+                  </button>
+                }
+              >
+                {!editingConsultDay && (
+                  consultationDay !== null ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20">
+                        <Calendar className="w-4 h-4 text-primary shrink-0" />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Chaque <span className="text-primary">{JOURS[consultationDay].label}</span></p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Prochain : {nextOccurrence ? (isToday ? "Aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })) : "—"}</p>
+                        </div>
+                      </div>
+                      {overdue && <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium"><AlertTriangle className="w-3.5 h-3.5" />Consultation de cette semaine non planifiée</div>}
+                    </div>
+                  ) : <p className="text-xs text-muted-foreground">Aucun jour récurrent défini. Cliquez sur <strong>Définir</strong> pour en choisir un.</p>
+                )}
+                {editingConsultDay && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                    <p className="text-xs text-muted-foreground">Choisissez le jour de consultation :</p>
+                    <div className="grid grid-cols-7 gap-1">
+                      {JOURS.map((j, i) => (
+                        <button key={i} onClick={() => setSelectedDay(i)}
+                          className={`py-2 rounded-xl text-xs font-medium transition-all ${selectedDay === i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>
+                          {j.short}
+                        </button>
+                      ))}
+                    </div>
+                    {selectedDay !== null && (
+                      <p className="text-xs text-muted-foreground">Prochain <strong className="text-foreground">{JOURS[selectedDay].label}</strong> : {format(getNextOccurrence(selectedDay), "dd MMMM yyyy", { locale: fr })}</p>
+                    )}
+                    <button onClick={handleSaveConsultationDay} disabled={savingConsultDay || selectedDay === null}
+                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
+                      {savingConsultDay ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Sauvegarde...</> : <><Check className="w-3.5 h-3.5" /> Confirmer</>}
+                    </button>
+                  </motion.div>
+                )}
+              </Section>
+            </motion.div>
+
+            {/* Consultations vidéo */}
+            <motion.div ref={consultSectionRef} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+              <Section title="Consultations vidéo" icon={<Video className="w-4 h-4" />}
+                action={
+                  <button onClick={() => setShowConsultForm(v => !v)}
                     className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all">
                     {showConsultForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
                     {showConsultForm ? "Annuler" : "Planifier"}
                   </button>
                 }
               >
-                {/* Formulaire planification médecin */}
                 {showConsultForm && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
                     <div>
                       <label className="text-xs text-muted-foreground mb-1 block">Lien Zoom *</label>
                       <input type="url" placeholder="https://zoom.us/j/..." value={consultForm.zoom_link}
-                        onChange={(e) => setConsultForm(p => ({ ...p, zoom_link: e.target.value }))}
+                        onChange={e => setConsultForm(p => ({ ...p, zoom_link: e.target.value }))}
                         className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground mb-1 block">Date et heure *</label>
                       <input type="datetime-local" value={consultForm.scheduled_at}
                         min={new Date().toISOString().slice(0, 16)}
-                        onChange={(e) => setConsultForm(p => ({ ...p, scheduled_at: e.target.value }))}
+                        onChange={e => setConsultForm(p => ({ ...p, scheduled_at: e.target.value }))}
                         className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
                     </div>
                     <div>
                       <label className="text-xs text-muted-foreground mb-1 block">Notes (optionnel)</label>
                       <textarea placeholder="Instructions pour le patient..." value={consultForm.notes}
-                        onChange={(e) => setConsultForm(p => ({ ...p, notes: e.target.value }))}
+                        onChange={e => setConsultForm(p => ({ ...p, notes: e.target.value }))}
                         rows={2} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all resize-none" />
                     </div>
                     <button onClick={handlePlanifierConsultation}
@@ -542,96 +734,36 @@ const DoctorPatientFiche = () => {
                     </button>
                   </motion.div>
                 )}
-
-                {/* Liste consultations */}
-                {consultations.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Aucune consultation.</p>
-                ) : (
-                  <div className="space-y-3">
+                {consultations.length === 0 ? <p className="text-xs text-muted-foreground">Aucune consultation planifiée.</p> : (
+                  <div className="space-y-2">
                     {consultations.map((c) => (
-                      <div key={c.id} className={`p-3 rounded-xl border bg-muted/30 space-y-2 ${
-                        c.demande_patient && c.zoom_link === "en_attente"
-                          ? "border-yellow-500/30 bg-yellow-500/5"
-                          : "border-border"
-                      }`}>
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div key={c.id} className="p-3 rounded-xl border border-border bg-muted/30 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
                             <Calendar className="w-3 h-3" />
-                            <span className="font-medium text-foreground">
-                              {format(new Date(c.scheduled_at), "dd MMM yyyy · HH:mm", { locale: fr })}
-                            </span>
+                            <span className="font-medium text-foreground">{format(new Date(c.scheduled_at), "dd MMM yyyy · HH:mm", { locale: fr })}</span>
                           </div>
-                          {consultationStatusBadge(c)}
+                          {consultationStatusBadge(c.status)}
                         </div>
-
-                        {/* Message du patient si demande */}
-                        {c.demande_patient && c.message_patient && (
-                          <div className="flex items-start gap-2 p-2 bg-muted/50 rounded-lg">
-                            <MessageSquare className="w-3 h-3 text-muted-foreground mt-0.5 shrink-0" />
-                            <p className="text-xs text-muted-foreground italic">"{c.message_patient}"</p>
-                          </div>
-                        )}
-
                         {c.notes && <p className="text-xs text-muted-foreground italic">{c.notes}</p>}
-
-                        {/* ── CAS 1 : Demande patient en attente → Accepter/Refuser ── */}
-                        {c.demande_patient && c.zoom_link === "en_attente" ? (
-                          <div className="space-y-2">
-                            {repondreId === c.id ? (
-                              <div className="space-y-2">
-                                <input type="url" placeholder="https://zoom.us/j/..."
-                                  value={repondreZoom}
-                                  onChange={(e) => setRepondreZoom(e.target.value)}
-                                  className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-primary/50 transition-all" />
-                                <div className="flex gap-2">
-                                  <button onClick={() => handleAccepterDemande(c.id)}
-                                    disabled={repondreLoading || !repondreZoom}
-                                    className="flex-1 flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all disabled:opacity-50">
-                                    {repondreLoading ? <Loader className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                    Confirmer
-                                  </button>
-                                  <button onClick={() => { setRepondreId(null); setRepondreZoom(""); }}
-                                    className="px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:bg-muted transition-all">
-                                    Annuler
-                                  </button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="flex gap-2">
-                                <button onClick={() => setRepondreId(c.id)}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
-                                  <Check className="w-3 h-3" /> Accepter + lien Zoom
-                                </button>
-                                <button onClick={() => handleRefuserDemande(c.id)}
-                                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
-                                  <XCircle className="w-3 h-3" /> Refuser
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        ) : (
-                          /* ── CAS 2 : Consultation normale ── */
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {c.zoom_link && c.zoom_link !== "en_attente" && (
-                              <a href={c.zoom_link} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all">
-                                <Video className="w-3 h-3" /> Rejoindre <ExternalLink className="w-2.5 h-2.5" />
-                              </a>
-                            )}
-                            {c.status === "planifiee" && (
-                              <>
-                                <button onClick={() => handleTerminerConsultation(c.id)}
-                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
-                                  <Check className="w-3 h-3" /> Terminée
-                                </button>
-                                <button onClick={() => handleAnnulerConsultation(c.id)}
-                                  className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
-                                  <X className="w-3 h-3" /> Annuler
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <a href={c.zoom_link} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all">
+                            <Video className="w-3 h-3" /> Rejoindre <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          {c.status === "planifiee" && (
+                            <>
+                              <button onClick={() => handleTerminerConsultation(c.id)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
+                                <Check className="w-3 h-3" /> Terminée
+                              </button>
+                              <button onClick={() => handleAnnulerConsultation(c.id)}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
+                                <X className="w-3 h-3" /> Annuler
+                              </button>
+                            </>
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -640,90 +772,171 @@ const DoctorPatientFiche = () => {
             </motion.div>
           </div>
 
-          {/* MIDDLE + RIGHT */}
+          {/* ── Right column ── */}
           <div className="lg:col-span-2 space-y-5">
 
+            {/* ══ SECTION VITALS — remplace LiveECGChart ══ */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
+              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5">
+
+                {/* Header vitals */}
+                <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Données vitales — Dernière mesure</h3>
+                    <h3 className="text-sm font-semibold text-foreground">Constantes vitales en temps réel</h3>
                   </div>
-                  {device ? (
-                    <div className="flex items-center gap-1.5 text-xs">
-                      {isOnline
-                        ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
-                        : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>}
-                      {device.dernier_signal && <span className="text-muted-foreground ml-1">· {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}</span>}
-                    </div>
-                  ) : <span className="text-xs text-muted-foreground">Aucun appareil</span>}
+                  <div className="flex items-center gap-3">
+                    {lastUpdate && (
+                      <span className="text-xs text-muted-foreground">
+                        Mise à jour : {formatTime(lastUpdate)}
+                      </span>
+                    )}
+                    {device ? (
+                      <div className="flex items-center gap-1.5 text-xs">
+                        {isOnline
+                          ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
+                          : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>}
+                        {device.dernier_signal && (
+                          <span className="text-muted-foreground ml-1">
+                            · {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}
+                          </span>
+                        )}
+                      </div>
+                    ) : <span className="text-xs text-muted-foreground">Aucun appareil</span>}
+                    {lastUpdate && (
+                      <div className="flex items-center gap-1.5 text-xs text-green-500">
+                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                        Temps réel
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {latestVital ? (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    <VitalMini icon={<Heart className="w-3.5 h-3.5" />} label="Fréquence cardiaque" value={latestVital.bpm} unit="bpm" color={latestVital.bpm && (latestVital.bpm < 60 || latestVital.bpm > 100) ? "text-red-500" : "text-foreground"} />
-                    <VitalMini icon={<Activity className="w-3.5 h-3.5" />} label="SpO₂" value={latestVital.spo2 ? `${latestVital.spo2}` : null} unit="%" color={latestVital.spo2 && latestVital.spo2 < 95 ? "text-red-500" : "text-foreground"} />
-                    <VitalMini icon={<Thermometer className="w-3.5 h-3.5" />} label="Température" value={latestVital.temperature ? Number(latestVital.temperature).toFixed(1) : null} unit="°C" color={latestVital.temperature && (latestVital.temperature < 36 || latestVital.temperature > 37.5) ? "text-orange-500" : "text-foreground"} />
-                    <VitalMini icon={<Battery className="w-3.5 h-3.5" />} label="Batterie" value={latestVital.niveau_batterie} unit="%" color={batteryColor(latestVital.niveau_batterie)} />
+
+                {/* VitalCards — même que PatientVitals */}
+                {!deviceId ? (
+                  <div className="text-center py-8 text-muted-foreground text-sm">
+                    <Activity className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    Aucun capteur associé à ce patient
                   </div>
                 ) : (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {["Fréquence cardiaque", "SpO₂", "Température", "Batterie"].map((l) => <div key={l} className="bg-muted/50 rounded-xl p-3 h-20 animate-pulse" />)}
-                  </div>
-                )}
-                {latestVital?.chute && <div className="mt-3 flex items-center gap-2 p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-500 text-xs font-medium"><AlertTriangle className="w-3.5 h-3.5" /> Chute détectée</div>}
-                {latestVital?.latitude && latestVital?.longitude && (
-                  <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <MapPin className="w-3 h-3" />
-                    <a href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`} target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-                      {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
-                    </a>
-                  </div>
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <VitalCard icon="❤️" label="Fréq. Cardiaque"
+                        value={latestVital?.bpm?.toString() ?? "—"} unit="BPM"
+                        status={getBpmStatus(latestVital?.bpm ?? null)}
+                        delay={0.1} borderColor="border-l-primary">
+                        <div className="mt-2 h-1 rounded-full bg-primary/10">
+                          <div className="h-full rounded-full bg-primary animate-pulse"
+                            style={{ width: `${Math.min(((latestVital?.bpm ?? 0) / 200) * 100, 100)}%` }} />
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Normal : 60-100 BPM</p>
+                      </VitalCard>
+
+                      <VitalCard icon="🩸" label="SpO2"
+                        value={latestVital?.spo2?.toString() ?? "—"} unit="%"
+                        status={getSpo2Status(latestVital?.spo2 ?? null)}
+                        delay={0.15} borderColor="border-l-safe">
+                        <p className="text-xs text-muted-foreground mt-2">Normal : 95-100%</p>
+                      </VitalCard>
+
+                      <VitalCard icon="🌡️" label="Température"
+                        value={latestVital?.temperature?.toFixed(1) ?? "—"} unit="°C"
+                        status={getTempStatus(latestVital?.temperature ?? null)}
+                        delay={0.2} borderColor="border-l-accent">
+                        <p className="text-xs text-muted-foreground mt-2">Normal : 36.1-37.2°C</p>
+                      </VitalCard>
+
+                      <VitalCard
+                        icon={latestVital?.chute ? "🚨" : "✅"}
+                        label="Détection Chute"
+                        value={latestVital?.chute ? "ALERTE" : "Normal"} unit=""
+                        status={latestVital?.chute ? "critical" : "safe"}
+                        delay={0.25} borderColor={latestVital?.chute ? "border-l-destructive" : "border-l-safe"}>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {latestVital?.chute ? "⚠️ Chute détectée !" : "Aucune chute détectée"}
+                        </p>
+                      </VitalCard>
+                    </div>
+
+                    {/* Batterie + GPS */}
+                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
+                      {latestVital?.niveau_batterie != null && (
+                        <div className="flex items-center gap-1.5">
+                          <Battery className="w-3.5 h-3.5" />
+                          <span className={batteryColor(latestVital.niveau_batterie)}>
+                            Batterie : {latestVital.niveau_batterie}%
+                          </span>
+                        </div>
+                      )}
+                      {latestVital?.latitude && latestVital?.longitude && (
+                        <div className="flex items-center gap-1.5">
+                          <MapPin className="w-3 h-3" />
+                          <a href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`}
+                            target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
+                            {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
+                          </a>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Graphe BPM — même que PatientVitals */}
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-semibold text-foreground">
+                          Fréquence Cardiaque — 20 dernières mesures
+                        </h4>
+                        <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" style={{ animationDuration: "3s" }} />
+                      </div>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis domain={[40, 160]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                          <Line type="monotone" dataKey="BPM" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Graphe SpO2 — même que PatientVitals */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground mb-3">SpO2 — 20 dernières mesures</h4>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis domain={[80, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                          <Line type="monotone" dataKey="SpO2" stroke="hsl(var(--safe))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Graphe Température */}
+                    <div>
+                      <h4 className="text-xs font-semibold text-foreground mb-3">Température — 20 dernières mesures</h4>
+                      <ResponsiveContainer width="100%" height={180}>
+                        <LineChart data={chartData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <YAxis domain={[35, 41]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                          <ReferenceLine y={37.5} stroke="#f97316" strokeDasharray="4 2" strokeOpacity={0.5} />
+                          <Line type="monotone" dataKey="Température" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </>
                 )}
               </div>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
-              <LiveECGChart title="Moniteur ECG en direct" />
-            </motion.div>
-
-            {vitalsHistory.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
-                <div className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2"><TrendingUp className="w-4 h-4 text-primary" /><h3 className="text-sm font-semibold text-foreground">Historique des constantes</h3></div>
-                    <div className="flex gap-1">
-                      {(["bpm", "spo2", "temperature"] as const).map((tab) => (
-                        <button key={tab} onClick={() => setActiveVitalTab(tab)}
-                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${activeVitalTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-                          {vitalConfig[tab].label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="h-48">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="time" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-                        <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} tickLine={false} axisLine={false} />
-                        <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} labelStyle={{ color: "hsl(var(--muted-foreground))" }} />
-                        <ReferenceLine y={vc.ref[0]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
-                        <ReferenceLine y={vc.ref[1]} stroke={vc.color} strokeDasharray="4 2" strokeOpacity={0.4} />
-                        <Line type="monotone" dataKey={vc.key} stroke={vc.color} strokeWidth={2} dot={false} isAnimationActive={false} connectNulls />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </div>
-                  <p className="text-[10px] text-muted-foreground mt-1">Lignes de référence : plage normale</p>
-                </div>
-              </motion.div>
-            )}
-
+            {/* Alertes */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
               <Section title={`Alertes récentes (${alerts.length})`} icon={<AlertTriangle className="w-4 h-4" />}>
                 {alerts.length === 0 ? <p className="text-xs text-muted-foreground">Aucune alerte récente</p> : (
                   <div className="space-y-2">
-                    {alerts.map((a) => (
+                    {alerts.map(a => (
                       <div key={a.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs ${severityColor[a.severity] || "text-muted-foreground bg-muted border-border"}`}>
                         <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
                         <div className="flex-1 min-w-0">
@@ -744,11 +957,12 @@ const DoctorPatientFiche = () => {
               </Section>
             </motion.div>
 
+            {/* Anomalies IA */}
             {anomalies.length > 0 && (
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
                 <Section title="Anomalies détectées par IA" icon={<Zap className="w-4 h-4" />}>
                   <div className="space-y-2">
-                    {anomalies.map((a) => (
+                    {anomalies.map(a => (
                       <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/50 text-xs">
                         <div>
                           <p className="font-medium text-foreground">{a.type_anomalie.replace(/_/g, " ")}</p>
@@ -769,9 +983,10 @@ const DoctorPatientFiche = () => {
               </motion.div>
             )}
 
+            {/* Notes cliniques */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
               <Section title="Notes cliniques" icon={<FileText className="w-4 h-4" />}>
-                <textarea value={notes} onChange={(e) => setNotes(e.target.value)}
+                <textarea value={notes} onChange={e => setNotes(e.target.value)}
                   placeholder="Ajouter des notes cliniques..."
                   className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none" />
                 <div className="flex items-center justify-between mt-3">
