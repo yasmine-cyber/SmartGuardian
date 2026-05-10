@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   Home, Activity, Bell, History, AlertTriangle, User, Settings, Users,
   BarChart3, MessageSquare, Shield, Cpu, FileText, Heart,
-  ChevronLeft, ChevronRight, LogOut, Menu, Wifi
+  ChevronLeft, ChevronRight, LogOut, Menu, Wifi, FlaskConical,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -14,57 +14,52 @@ interface NavItem {
   icon: React.ElementType;
   label: string;
   path: string;
+  badgeKey?: string;
 }
 
 const navItems: Record<Role, NavItem[]> = {
   patient: [
-    { icon: Home, label: "Accueil", path: "/patient" },
-    { icon: Activity, label: "Mes Constantes", path: "/patient/vitals" },
-    { icon: Users, label: "Mes Médecins", path: "/patient/medecins" },
-    { icon: MessageSquare, label: "Messagerie", path: "/patient/messages" },
-    { icon: Bell, label: "Alertes", path: "/patient/alerts" },
-    { icon: History, label: "Historique", path: "/patient/history" },
-    { icon: AlertTriangle, label: "Urgence", path: "/patient/emergency" },
-    { icon: User, label: "Profil", path: "/patient/profile" },
-    { icon: Settings, label: "Paramètres", path: "/patient/settings" },
+    { icon: Home,          label: "Accueil",        path: "/patient" },
+    { icon: Activity,      label: "Mes Constantes", path: "/patient/vitals" },
+    { icon: Users,         label: "Mes Médecins",   path: "/patient/medecins" },
+    { icon: MessageSquare, label: "Messagerie",      path: "/patient/messages" },
+    { icon: FlaskConical,  label: "Mes Analyses",   path: "/patient/analyses", badgeKey: "analyses" },
+    { icon: Bell,          label: "Alertes",         path: "/patient/alerts" },
+    { icon: History,       label: "Historique",      path: "/patient/history" },
+    { icon: AlertTriangle, label: "Urgence",         path: "/patient/emergency" },
+    { icon: User,          label: "Profil",          path: "/patient/profile" },
+    { icon: Settings,      label: "Paramètres",      path: "/patient/settings" },
   ],
   doctor: [
-    { icon: Home, label: "Vue d'ensemble", path: "/doctor" },
-    { icon: Users, label: "Mes Patients", path: "/doctor/patients" },
-    { icon: Bell, label: "Alertes Critiques", path: "/doctor/alerts" },
-    { icon: BarChart3, label: "Analyses", path: "/doctor/analytics" },
-    { icon: MessageSquare, label: "Messages", path: "/doctor/messages" },
-    { icon: Settings, label: "Paramètres", path: "/doctor/settings" },
+    { icon: Home,          label: "Vue d'ensemble",   path: "/doctor" },
+    { icon: Users,         label: "Mes Patients",     path: "/doctor/patients" },
+    { icon: Bell,          label: "Alertes Critiques", path: "/doctor/alerts" },
+    { icon: BarChart3,     label: "Analyses",          path: "/doctor/analytics" },
+    { icon: MessageSquare, label: "Messages",           path: "/doctor/messages" },
+    { icon: Settings,      label: "Paramètres",         path: "/doctor/settings" },
   ],
   family: [
-    { icon: Heart, label: "Mes Proches", path: "/family" },
-    { icon: MessageSquare, label: "Messagerie", path: "/family/messages" },
-    { icon: Bell, label: "Alertes", path: "/family/alerts" },
-    { icon: Settings, label: "Paramètres", path: "/family/parametres" },
+    { icon: Heart,         label: "Mes Proches",  path: "/family" },
+    { icon: MessageSquare, label: "Messagerie",    path: "/family/messages" },
+    { icon: Bell,          label: "Alertes",       path: "/family/alerts" },
+    { icon: Settings,      label: "Paramètres",    path: "/family/parametres" },
   ],
   admin: [
-    { icon: Home, label: "Vue système", path: "/admin" },
-    { icon: Users, label: "Utilisateurs", path: "/admin/users" },
-    { icon: Cpu, label: "Capteurs IoT", path: "/admin/devices" },
-    { icon: Shield, label: "Rôles & Accès", path: "/admin/roles" },
+    { icon: Home,     label: "Vue système",    path: "/admin" },
+    { icon: Users,    label: "Utilisateurs",   path: "/admin/users" },
+    { icon: Cpu,      label: "Capteurs IoT",   path: "/admin/devices" },
+    { icon: Shield,   label: "Rôles & Accès",  path: "/admin/roles" },
     { icon: Activity, label: "Seuils d'alerte", path: "/admin/thresholds" },
-    { icon: FileText, label: "Journaux", path: "/admin/logs" },
-    { icon: Settings, label: "Santé système", path: "/admin/system" },
+    { icon: FileText, label: "Journaux",        path: "/admin/logs" },
+    { icon: Settings, label: "Santé système",   path: "/admin/system" },
   ],
 };
 
 const roleLabels: Record<Role, string> = {
-  patient: "Patient",
-  doctor: "Médecin",
-  family: "Aidant Familial",
-  admin: "Administrateur",
+  patient: "Patient", doctor: "Médecin", family: "Aidant Familial", admin: "Administrateur",
 };
-
 const roleNames: Record<Role, string> = {
-  patient: "Patient",
-  doctor: "Médecin",
-  family: "Aidant",
-  admin: "Admin Système",
+  patient: "Patient", doctor: "Médecin", family: "Aidant", admin: "Admin Système",
 };
 
 interface DashboardLayoutProps {
@@ -73,13 +68,15 @@ interface DashboardLayoutProps {
 }
 
 const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed]   = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [userName, setUserName] = useState<string | null>(null);
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
+  const [userName, setUserName]     = useState<string | null>(null);
+  const [photoUrl, setPhotoUrl]     = useState<string | null>(null);
+  const [badges, setBadges]         = useState<Record<string, number>>({});
+
   const location = useLocation();
   const navigate = useNavigate();
-  const items = navItems[role];
+  const items    = navItems[role];
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -87,28 +84,58 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     navigate("/");
   };
 
+  // Load profile
   useEffect(() => {
     const loadProfile = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
-
       const { data, error } = await supabase
-        .from("utilisateurs")
-        .select("nom, prenom, photo_url")
-        .eq("id", user.id)
-        .single();
-
+        .from("utilisateurs").select("nom, prenom, photo_url").eq("id", user.id).single();
       if (!error && data) {
         const fullName = [data.prenom, data.nom].filter(Boolean).join(" ").trim();
         if (fullName) setUserName(fullName);
         if (data.photo_url) setPhotoUrl(data.photo_url);
       }
     };
-
     loadProfile();
   }, []);
 
-  const displayName = userName || roleNames[role];
+  // Load analyses badge for patient
+  useEffect(() => {
+    if (role !== "patient") return;
+    let channel: ReturnType<typeof supabase.channel> | null = null;
+
+    const loadBadges = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: p } = await supabase.from("patients").select("id").eq("user_id", user.id).single();
+      if (!p) return;
+
+      const fetchCount = async () => {
+        const { count } = await supabase
+          .from("medical_analyses")
+          .select("*", { count: "exact", head: true })
+          .eq("patient_id", p.id)
+          .eq("statut", "demandee");
+        setBadges({ analyses: count ?? 0 });
+      };
+
+      await fetchCount();
+
+      channel = supabase
+        .channel("analyses_badge_layout")
+        .on("postgres_changes", {
+          event: "*", schema: "public", table: "medical_analyses",
+          filter: `patient_id=eq.${p.id}`,
+        }, fetchCount)
+        .subscribe();
+    };
+
+    loadBadges();
+    return () => { if (channel) supabase.removeChannel(channel); };
+  }, [role]);
+
+  const displayName    = userName || roleNames[role];
   const displayInitial = displayName?.charAt(0) || roleNames[role].charAt(0);
 
   const SidebarContent = () => (
@@ -120,7 +147,8 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
       <nav className="flex-1 py-4 px-2 space-y-0.5 overflow-y-auto">
         {items.map((item) => {
-          const isActive = location.pathname === item.path;
+          const isActive   = location.pathname === item.path;
+          const badgeCount = item.badgeKey ? (badges[item.badgeKey] ?? 0) : 0;
           return (
             <Link
               key={item.path}
@@ -129,13 +157,24 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all
                 ${isActive
                   ? "bg-primary/10 text-primary"
-                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                }
+                  : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"}
                 ${collapsed ? "justify-center" : ""}
               `}
             >
-              <item.icon className={`w-[18px] h-[18px] flex-shrink-0 ${isActive ? "text-primary" : ""}`} />
-              {!collapsed && <span>{item.label}</span>}
+              <div className="relative flex-shrink-0">
+                <item.icon className={`w-[18px] h-[18px] ${isActive ? "text-primary" : ""}`} />
+                {badgeCount > 0 && collapsed && (
+                  <span className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-yellow-500 text-white text-[9px] font-bold flex items-center justify-center">
+                    {badgeCount > 9 ? "9+" : badgeCount}
+                  </span>
+                )}
+              </div>
+              {!collapsed && <span className="flex-1">{item.label}</span>}
+              {!collapsed && badgeCount > 0 && (
+                <span className="w-5 h-5 rounded-full bg-yellow-500/15 text-yellow-600 text-[10px] font-bold flex items-center justify-center border border-yellow-500/30">
+                  {badgeCount > 9 ? "9+" : badgeCount}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -143,13 +182,10 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
       <div className="border-t border-sidebar-border p-4">
         <div className={`flex items-center gap-3 ${collapsed ? "justify-center" : ""}`}>
-          {/* Avatar with photo support */}
           <div className="w-9 h-9 rounded-full overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0">
-            {photoUrl ? (
-              <img src={photoUrl} alt="Photo de profil" className="w-full h-full object-cover" />
-            ) : (
-              <span className="text-primary font-semibold text-sm">{displayInitial}</span>
-            )}
+            {photoUrl
+              ? <img src={photoUrl} alt="Photo de profil" className="w-full h-full object-cover" />
+              : <span className="text-primary font-semibold text-sm">{displayInitial}</span>}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
@@ -173,11 +209,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   return (
     <div className="flex h-screen bg-background overflow-hidden">
       {/* Desktop sidebar */}
-      <aside
-        className={`hidden lg:flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 relative ${
-          collapsed ? "w-[72px]" : "w-64"
-        }`}
-      >
+      <aside className={`hidden lg:flex flex-col border-r border-sidebar-border bg-sidebar transition-all duration-300 relative ${collapsed ? "w-[72px]" : "w-64"}`}>
         <SidebarContent />
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -191,8 +223,14 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
       <AnimatePresence>
         {mobileOpen && (
           <>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 lg:hidden" onClick={() => setMobileOpen(false)} />
-            <motion.aside initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }} transition={{ type: "spring", damping: 25, stiffness: 200 }} className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 lg:hidden">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="fixed inset-0 bg-foreground/20 backdrop-blur-sm z-40 lg:hidden"
+              onClick={() => setMobileOpen(false)} />
+            <motion.aside
+              initial={{ x: -280 }} animate={{ x: 0 }} exit={{ x: -280 }}
+              transition={{ type: "spring", damping: 25, stiffness: 200 }}
+              className="fixed left-0 top-0 bottom-0 w-64 bg-sidebar border-r border-sidebar-border z-50 lg:hidden"
+            >
               <SidebarContent />
             </motion.aside>
           </>
@@ -202,10 +240,10 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0">
         <header className="h-16 border-b border-border flex items-center justify-between px-4 lg:px-6 bg-background">
-          <button onClick={() => setMobileOpen(true)} className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted">
+          <button onClick={() => setMobileOpen(true)}
+            className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted">
             <Menu className="w-5 h-5" />
           </button>
-          {/* Device status */}
           <div className="hidden lg:flex items-center gap-2 text-xs text-muted-foreground">
             <span className="w-1.5 h-1.5 rounded-full bg-safe" />
             <span>Capteur actif</span>
@@ -220,7 +258,6 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
             </button>
           </div>
         </header>
-
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {children}
         </main>

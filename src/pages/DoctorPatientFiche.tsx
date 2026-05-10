@@ -7,7 +7,7 @@ import {
   Home, Stethoscope, FileText, Users, Wifi, WifiOff,
   ChevronRight, Save, Loader, CheckCircle, TrendingUp,
   Shield, Zap, Video, Calendar, X, Plus, ExternalLink, Check,
-  Bell, CalendarClock, RefreshCw,
+  Bell, CalendarClock, RefreshCw, FlaskConical,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import StatusBadge from "@/components/StatusBadge";
@@ -21,7 +21,7 @@ import {
   Tooltip, CartesianGrid, ReferenceLine
 } from "recharts";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface PatientFiche {
   id: string; user_id: string; nom: string; prenom: string;
@@ -43,6 +43,11 @@ interface Consultation {
   id: string; zoom_link: string; scheduled_at: string;
   status: "planifiee" | "terminee" | "annulee"; notes: string | null; created_at: string;
 }
+interface Analyse {
+  id: string; type: string; note_medecin: string | null;
+  statut: string; file_url: string | null; file_name: string | null;
+  created_at: string; submitted_at: string | null;
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -54,6 +59,11 @@ const JOURS = [
   { label: "Jeudi",    short: "Jeu" },
   { label: "Vendredi", short: "Ven" },
   { label: "Samedi",   short: "Sam" },
+];
+
+const ANALYSE_TYPES = [
+  "Bilan sanguin", "Radio thorax", "Échographie abdominale",
+  "Scanner", "IRM", "Électrocardiogramme", "Analyse urine", "Autre",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -121,28 +131,9 @@ const isNextOccurrencePlanned = (consultationDay: number | null, consultations: 
   });
 };
 
-// ─── Vital helpers (même logique que PatientVitals) ──────────────────────────
-
-const getBpmStatus = (v: number | null): "safe" | "warning" | "critical" => {
-  if (!v) return "safe";
-  if (v > 120 || v < 40) return "critical";
-  if (v > 100 || v < 50) return "warning";
-  return "safe";
-};
-
-const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => {
-  if (!v) return "safe";
-  if (v < 90) return "critical";
-  if (v < 95) return "warning";
-  return "safe";
-};
-
-const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => {
-  if (!v) return "safe";
-  if (v > 39.5 || v < 35) return "critical";
-  if (v > 37.5) return "warning";
-  return "safe";
-};
+const getBpmStatus  = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v > 120 || v < 40) return "critical"; if (v > 100 || v < 50) return "warning"; return "safe"; };
+const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v < 90) return "critical"; if (v < 95) return "warning"; return "safe"; };
+const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v > 39.5 || v < 35) return "critical"; if (v > 37.5) return "warning"; return "safe"; };
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -162,18 +153,6 @@ const Section = ({ title, icon, children, className = "", action }: {
   </div>
 );
 
-const VitalMini = ({ icon, label, value, unit, color = "text-foreground" }: {
-  icon: React.ReactNode; label: string; value: string | number | null; unit: string; color?: string;
-}) => (
-  <div className="bg-muted/50 rounded-xl p-3 flex flex-col gap-1">
-    <div className="flex items-center gap-1.5 text-muted-foreground">{icon}<span className="text-xs">{label}</span></div>
-    <div className="flex items-baseline gap-1">
-      <span className={`text-xl font-bold ${color}`}>{value ?? "—"}</span>
-      <span className="text-xs text-muted-foreground">{unit}</span>
-    </div>
-  </div>
-);
-
 const consultationStatusBadge = (status: string) => {
   if (status === "planifiee") return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">Planifiée</span>;
   if (status === "terminee")  return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">Terminée</span>;
@@ -187,6 +166,7 @@ const DoctorPatientFiche = () => {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
 
+  // ── Core states ──
   const [patient, setPatient]             = useState<PatientFiche | null>(null);
   const [device, setDevice]               = useState<Device | null>(null);
   const [latestVital, setLatestVital]     = useState<VitalSign | null>(null);
@@ -198,19 +178,26 @@ const DoctorPatientFiche = () => {
   const [savingNotes, setSavingNotes]     = useState(false);
   const [notesSaved, setNotesSaved]       = useState(false);
   const [loading, setLoading]             = useState(true);
-  const [activeVitalTab, setActiveVitalTab] = useState<"bpm" | "spo2" | "temperature">("bpm");
-  const [consultations, setConsultations] = useState<Consultation[]>([]);
-  const [showConsultForm, setShowConsultForm] = useState(false);
-  const [consultLoading, setConsultLoading]   = useState(false);
-  const [consultForm, setConsultForm] = useState({ zoom_link: "", scheduled_at: "", notes: "" });
+
+  // ── Consultation states ──
+  const [consultations, setConsultations]         = useState<Consultation[]>([]);
+  const [showConsultForm, setShowConsultForm]     = useState(false);
+  const [consultLoading, setConsultLoading]       = useState(false);
+  const [consultForm, setConsultForm]             = useState({ zoom_link: "", scheduled_at: "", notes: "" });
   const [consultationDay, setConsultationDay]     = useState<number | null>(null);
   const [savingConsultDay, setSavingConsultDay]   = useState(false);
   const [editingConsultDay, setEditingConsultDay] = useState(false);
   const [selectedDay, setSelectedDay]             = useState<number | null>(null);
   const [overdueAlertSent, setOverdueAlertSent]   = useState(false);
 
-  // ── Realtime vitals (nouveaux) ──
-  const [deviceId, setDeviceId] = useState<string | null>(null);
+  // ── Analyses states ──
+  const [analyses, setAnalyses]               = useState<Analyse[]>([]);
+  const [showAnalyseForm, setShowAnalyseForm] = useState(false);
+  const [analyseLoading, setAnalyseLoading]   = useState(false);
+  const [analyseForm, setAnalyseForm]         = useState({ type: "", note_medecin: "" });
+
+  // ── Realtime vitals ──
+  const [deviceId, setDeviceId]     = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
   const consultSectionRef = useRef<HTMLDivElement>(null);
@@ -220,7 +207,7 @@ const DoctorPatientFiche = () => {
     setTimeout(() => consultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
 
-  // ─── Load consultations ──────────────────────────────────────────────────────
+  // ─── Loaders ──────────────────────────────────────────────────────────────
 
   const loadConsultations = async (pid: string): Promise<Consultation[]> => {
     const { data } = await supabase
@@ -234,7 +221,16 @@ const DoctorPatientFiche = () => {
     return result;
   };
 
-  // ─── Main data loader ────────────────────────────────────────────────────────
+  const loadAnalyses = async (pid: string) => {
+    const { data } = await supabase
+      .from("medical_analyses")
+      .select("id, type, note_medecin, statut, file_url, file_name, created_at, submitted_at")
+      .eq("patient_id", pid)
+      .order("created_at", { ascending: false });
+    setAnalyses((data as Analyse[]) || []);
+  };
+
+  // ─── Main data loader ──────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     if (!patientId) return;
@@ -245,6 +241,7 @@ const DoctorPatientFiche = () => {
                utilisateurs!patients_user_id_fkey(nom, prenom, email, telephone, sexe)`)
       .eq("id", patientId).single();
     if (!p) { navigate("/doctor/patients"); return; }
+
     const u = p.utilisateurs as any;
     const patientData: PatientFiche = {
       id: p.id, user_id: p.user_id,
@@ -268,15 +265,12 @@ const DoctorPatientFiche = () => {
 
     if (devData) {
       setDeviceId(devData.id);
-
-      // Dernières 20 mesures (même que PatientVitals)
       const { data: vData } = await supabase
         .from("vital_signs")
         .select("id, bpm, spo2, temperature, niveau_batterie, chute, latitude, longitude, recorded_at")
         .eq("device_id", devData.id)
         .order("recorded_at", { ascending: false })
         .limit(20);
-
       if (vData && vData.length > 0) {
         const reversed = [...vData].reverse();
         setVitalsHistory(reversed as VitalSign[]);
@@ -306,6 +300,8 @@ const DoctorPatientFiche = () => {
     }));
 
     const consults = await loadConsultations(patientId);
+    await loadAnalyses(patientId);
+
     const cDay = p.consultation_day ?? null;
     if (cDay !== null && isConsultationOverdue(cDay, consults)) {
       await sendOverdueAlert(p.id, u?.nom, u?.prenom, cDay);
@@ -316,17 +312,14 @@ const DoctorPatientFiche = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  // ─── Realtime vitals subscription ────────────────────────────────────────────
+  // ─── Realtime vitals ───────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!deviceId) return;
-
     const channel = supabase
       .channel(`doctor_fiche_vitals_${deviceId}`)
       .on("postgres_changes", {
-        event: "INSERT",
-        schema: "public",
-        table: "vital_signs",
+        event: "INSERT", schema: "public", table: "vital_signs",
         filter: `device_id=eq.${deviceId}`,
       }, (payload) => {
         const newVital = payload.new as VitalSign;
@@ -335,11 +328,10 @@ const DoctorPatientFiche = () => {
         setVitalsHistory(prev => [...prev.slice(-19), newVital]);
       })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [deviceId]);
 
-  // ─── Overdue alert ───────────────────────────────────────────────────────────
+  // ─── Handlers: Overdue alert ───────────────────────────────────────────────
 
   const sendOverdueAlert = async (pid: string, nom: string, prenom: string, cDay: number) => {
     if (overdueAlertSent) return;
@@ -360,7 +352,7 @@ const DoctorPatientFiche = () => {
     toast.warning(`⚠️ Consultation du ${JOURS[cDay].label} non planifiée pour ${prenom} ${nom}`);
   };
 
-  // ─── Save consultation day ────────────────────────────────────────────────────
+  // ─── Handlers: Consultation day ────────────────────────────────────────────
 
   const handleSaveConsultationDay = async () => {
     if (!patient || selectedDay === null) return;
@@ -383,7 +375,7 @@ const DoctorPatientFiche = () => {
     setSavingConsultDay(false);
   };
 
-  // ─── Consultation CRUD ────────────────────────────────────────────────────────
+  // ─── Handlers: Consultations ───────────────────────────────────────────────
 
   const handlePlanifierConsultation = async () => {
     if (!patient || !consultForm.zoom_link || !consultForm.scheduled_at) {
@@ -432,7 +424,51 @@ const DoctorPatientFiche = () => {
     if (!error) { toast.success("Consultation annulée."); if (patient) await loadConsultations(patient.id); }
   };
 
-  // ─── Notes ───────────────────────────────────────────────────────────────────
+  // ─── Handlers: Analyses ────────────────────────────────────────────────────
+
+  const handleDemanderAnalyse = async () => {
+    if (!patient || !analyseForm.type) {
+      toast.error("Veuillez choisir un type d'analyse"); return;
+    }
+    setAnalyseLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { error } = await supabase.from("medical_analyses").insert({
+        patient_id: patient.id, medecin_id: user.id,
+        type: analyseForm.type,
+        note_medecin: analyseForm.note_medecin.trim() || null,
+        statut: "demandee",
+      });
+      if (error) throw error;
+      await supabase.from("notifications").insert({
+        user_id: patient.user_id,
+        title: "Nouvelle demande d'analyse",
+        message: `Votre médecin vous demande de soumettre : ${analyseForm.type}.`,
+        read: false,
+      });
+      toast.success("Demande d'analyse envoyée au patient !");
+      setAnalyseForm({ type: "", note_medecin: "" });
+      setShowAnalyseForm(false);
+      await loadAnalyses(patient.id);
+    } catch (err: any) {
+      toast.error("Erreur : " + err.message);
+    } finally {
+      setAnalyseLoading(false);
+    }
+  };
+
+  const handleMarquerVue = async (analyseId: string) => {
+    const { error } = await supabase.from("medical_analyses")
+      .update({ statut: "vue", viewed_at: new Date().toISOString() })
+      .eq("id", analyseId);
+    if (!error && patient) {
+      await loadAnalyses(patient.id);
+      toast.success("Analyse marquée comme consultée.");
+    }
+  };
+
+  // ─── Handlers: Other ──────────────────────────────────────────────────────
 
   const handleSaveNotes = async () => {
     if (!patient) return;
@@ -443,8 +479,6 @@ const DoctorPatientFiche = () => {
     else toast.error("Erreur lors de la sauvegarde");
     setSavingNotes(false);
   };
-
-  // ─── Messaging ───────────────────────────────────────────────────────────────
 
   const handleStartConversation = async () => {
     if (!patient) return;
@@ -475,27 +509,18 @@ const DoctorPatientFiche = () => {
     if (convId) navigate(`/doctor/messages?tab=proches&conversation=${convId}`);
   };
 
-  // ─── Derived data ─────────────────────────────────────────────────────────────
+  // ─── Derived ──────────────────────────────────────────────────────────────
 
-  // Graphes — même format que PatientVitals
   const chartData = vitalsHistory.map(v => ({
     time: new Date(v.recorded_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
-    BPM: v.bpm,
-    SpO2: v.spo2,
-    Température: v.temperature,
+    BPM: v.bpm, SpO2: v.spo2, Température: v.temperature,
   }));
 
-  const vitalConfig = {
-    bpm:         { key: "BPM",         color: "hsl(var(--primary))", label: "BPM",         unit: "bpm", ref: [60, 100] },
-    spo2:        { key: "SpO2",        color: "#3b82f6",             label: "SpO₂",        unit: "%",   ref: [95, 100] },
-    temperature: { key: "Température", color: "#f97316",             label: "Température", unit: "°C",  ref: [36, 37.5] },
-  };
-  const vc = vitalConfig[activeVitalTab];
-
-  const overdue = isConsultationOverdue(consultationDay, consultations);
+  const overdue               = isConsultationOverdue(consultationDay, consultations);
   const nextOccurrencePlanned = isNextOccurrencePlanned(consultationDay, consultations);
-  const nextOccurrence = consultationDay !== null ? getNextOccurrence(consultationDay) : null;
-  const isToday = nextOccurrence ? nextOccurrence.toDateString() === new Date().toDateString() : false;
+  const nextOccurrence        = consultationDay !== null ? getNextOccurrence(consultationDay) : null;
+  const isToday               = nextOccurrence ? nextOccurrence.toDateString() === new Date().toDateString() : false;
+  const newSubmissions        = analyses.filter(a => a.statut === "soumise").length;
 
   const formatTime = (d: Date) =>
     d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
@@ -507,7 +532,6 @@ const DoctorPatientFiche = () => {
       </div>
     </DashboardLayout>
   );
-
   if (!patient) return null;
 
   const initials = `${patient.prenom?.[0] || ""}${patient.nom?.[0] || ""}`.toUpperCase() || "?";
@@ -595,6 +619,8 @@ const DoctorPatientFiche = () => {
 
         {/* ── Main grid ── */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+          {/* ── LEFT COLUMN ── */}
           <div className="space-y-5">
 
             {/* Infos personnelles */}
@@ -640,6 +666,100 @@ const DoctorPatientFiche = () => {
                         <button onClick={() => handleMessageProche(p.proche_id)} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors shrink-0">
                           <MessageCircle className="w-3.5 h-3.5" />
                         </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </Section>
+            </motion.div>
+
+            {/* ── ANALYSES MÉDICALES ── */}
+            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.17 }}>
+              <Section
+                title={`Analyses médicales${newSubmissions > 0 ? ` · ${newSubmissions} résultat(s)` : ""}`}
+                icon={<FlaskConical className="w-4 h-4" />}
+                action={
+                  <button onClick={() => setShowAnalyseForm(v => !v)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all">
+                    {showAnalyseForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                    {showAnalyseForm ? "Annuler" : "Demander"}
+                  </button>
+                }
+              >
+                {showAnalyseForm && (
+                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                    className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Type d'analyse *</label>
+                      <select value={analyseForm.type}
+                        onChange={(e) => setAnalyseForm(p => ({ ...p, type: e.target.value }))}
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all">
+                        <option value="">Choisir...</option>
+                        {ANALYSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted-foreground mb-1 block">Instructions (optionnel)</label>
+                      <textarea
+                        placeholder="Ex : À jeun depuis 12h, apporter les résultats précédents..."
+                        value={analyseForm.note_medecin}
+                        onChange={(e) => setAnalyseForm(p => ({ ...p, note_medecin: e.target.value }))}
+                        rows={3}
+                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all resize-none" />
+                    </div>
+                    <button onClick={handleDemanderAnalyse}
+                      disabled={analyseLoading || !analyseForm.type}
+                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
+                      {analyseLoading
+                        ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</>
+                        : <><FlaskConical className="w-3.5 h-3.5" /> Envoyer la demande</>}
+                    </button>
+                  </motion.div>
+                )}
+
+                {analyses.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">Aucune analyse demandée.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {analyses.map((a) => (
+                      <div key={a.id} className={`p-3 rounded-xl border space-y-2 ${
+                        a.statut === "soumise" ? "border-blue-500/30 bg-blue-500/5" : "border-border bg-muted/30"
+                      }`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-foreground">{a.type}</p>
+                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
+                            a.statut === "demandee" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
+                            a.statut === "soumise"  ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
+                                                      "bg-green-500/10 text-green-600 border-green-500/20"
+                          }`}>
+                            {a.statut === "demandee" ? "En attente" : a.statut === "soumise" ? "Résultat reçu" : "Consultée"}
+                          </span>
+                        </div>
+                        {a.note_medecin && <p className="text-[11px] text-muted-foreground italic leading-relaxed">{a.note_medecin}</p>}
+                        <p className="text-[10px] text-muted-foreground">
+                          {format(new Date(a.created_at), "dd MMM yyyy", { locale: fr })}
+                          {a.submitted_at && ` · Soumis ${formatDistanceToNow(new Date(a.submitted_at), { addSuffix: true, locale: fr })}`}
+                        </p>
+                        {a.statut === "soumise" && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {a.file_url && (
+                              <a href={a.file_url} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                                <FileText className="w-3 h-3" />{a.file_name || "Voir le document"}
+                              </a>
+                            )}
+                            <button onClick={() => handleMarquerVue(a.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
+                              <CheckCircle className="w-3 h-3" /> Marquer comme vue
+                            </button>
+                          </div>
+                        )}
+                        {a.statut === "vue" && a.file_url && (
+                          <a href={a.file_url} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
+                            <FileText className="w-3 h-3" />{a.file_name || "Voir le document"}
+                          </a>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -772,35 +892,25 @@ const DoctorPatientFiche = () => {
             </motion.div>
           </div>
 
-          {/* ── Right column ── */}
+          {/* ── RIGHT COLUMN ── */}
           <div className="lg:col-span-2 space-y-5">
 
-            {/* ══ SECTION VITALS — remplace LiveECGChart ══ */}
+            {/* Vitals temps réel */}
             <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
               <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5">
-
-                {/* Header vitals */}
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-primary" />
                     <h3 className="text-sm font-semibold text-foreground">Constantes vitales en temps réel</h3>
                   </div>
                   <div className="flex items-center gap-3">
-                    {lastUpdate && (
-                      <span className="text-xs text-muted-foreground">
-                        Mise à jour : {formatTime(lastUpdate)}
-                      </span>
-                    )}
+                    {lastUpdate && <span className="text-xs text-muted-foreground">Mise à jour : {formatTime(lastUpdate)}</span>}
                     {device ? (
                       <div className="flex items-center gap-1.5 text-xs">
                         {isOnline
                           ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
                           : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>}
-                        {device.dernier_signal && (
-                          <span className="text-muted-foreground ml-1">
-                            · {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}
-                          </span>
-                        )}
+                        {device.dernier_signal && <span className="text-muted-foreground ml-1">· {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}</span>}
                       </div>
                     ) : <span className="text-xs text-muted-foreground">Aucun appareil</span>}
                     {lastUpdate && (
@@ -812,7 +922,6 @@ const DoctorPatientFiche = () => {
                   </div>
                 </div>
 
-                {/* VitalCards — même que PatientVitals */}
                 {!deviceId ? (
                   <div className="text-center py-8 text-muted-foreground text-sm">
                     <Activity className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -823,49 +932,40 @@ const DoctorPatientFiche = () => {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <VitalCard icon="❤️" label="Fréq. Cardiaque"
                         value={latestVital?.bpm?.toString() ?? "—"} unit="BPM"
-                        status={getBpmStatus(latestVital?.bpm ?? null)}
-                        delay={0.1} borderColor="border-l-primary">
+                        status={getBpmStatus(latestVital?.bpm ?? null)} delay={0.1} borderColor="border-l-primary">
                         <div className="mt-2 h-1 rounded-full bg-primary/10">
                           <div className="h-full rounded-full bg-primary animate-pulse"
                             style={{ width: `${Math.min(((latestVital?.bpm ?? 0) / 200) * 100, 100)}%` }} />
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">Normal : 60-100 BPM</p>
                       </VitalCard>
-
                       <VitalCard icon="🩸" label="SpO2"
                         value={latestVital?.spo2?.toString() ?? "—"} unit="%"
-                        status={getSpo2Status(latestVital?.spo2 ?? null)}
-                        delay={0.15} borderColor="border-l-safe">
+                        status={getSpo2Status(latestVital?.spo2 ?? null)} delay={0.15} borderColor="border-l-safe">
                         <p className="text-xs text-muted-foreground mt-2">Normal : 95-100%</p>
                       </VitalCard>
-
                       <VitalCard icon="🌡️" label="Température"
                         value={latestVital?.temperature?.toFixed(1) ?? "—"} unit="°C"
-                        status={getTempStatus(latestVital?.temperature ?? null)}
-                        delay={0.2} borderColor="border-l-accent">
+                        status={getTempStatus(latestVital?.temperature ?? null)} delay={0.2} borderColor="border-l-accent">
                         <p className="text-xs text-muted-foreground mt-2">Normal : 36.1-37.2°C</p>
                       </VitalCard>
-
                       <VitalCard
                         icon={latestVital?.chute ? "🚨" : "✅"}
                         label="Détection Chute"
                         value={latestVital?.chute ? "ALERTE" : "Normal"} unit=""
-                        status={latestVital?.chute ? "critical" : "safe"}
-                        delay={0.25} borderColor={latestVital?.chute ? "border-l-destructive" : "border-l-safe"}>
+                        status={latestVital?.chute ? "critical" : "safe"} delay={0.25}
+                        borderColor={latestVital?.chute ? "border-l-destructive" : "border-l-safe"}>
                         <p className="text-xs text-muted-foreground mt-2">
                           {latestVital?.chute ? "⚠️ Chute détectée !" : "Aucune chute détectée"}
                         </p>
                       </VitalCard>
                     </div>
 
-                    {/* Batterie + GPS */}
                     <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
                       {latestVital?.niveau_batterie != null && (
                         <div className="flex items-center gap-1.5">
                           <Battery className="w-3.5 h-3.5" />
-                          <span className={batteryColor(latestVital.niveau_batterie)}>
-                            Batterie : {latestVital.niveau_batterie}%
-                          </span>
+                          <span className={batteryColor(latestVital.niveau_batterie)}>Batterie : {latestVital.niveau_batterie}%</span>
                         </div>
                       )}
                       {latestVital?.latitude && latestVital?.longitude && (
@@ -879,12 +979,9 @@ const DoctorPatientFiche = () => {
                       )}
                     </div>
 
-                    {/* Graphe BPM — même que PatientVitals */}
                     <div>
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-semibold text-foreground">
-                          Fréquence Cardiaque — 20 dernières mesures
-                        </h4>
+                        <h4 className="text-xs font-semibold text-foreground">Fréquence Cardiaque — 20 dernières mesures</h4>
                         <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" style={{ animationDuration: "3s" }} />
                       </div>
                       <ResponsiveContainer width="100%" height={180}>
@@ -898,7 +995,6 @@ const DoctorPatientFiche = () => {
                       </ResponsiveContainer>
                     </div>
 
-                    {/* Graphe SpO2 — même que PatientVitals */}
                     <div>
                       <h4 className="text-xs font-semibold text-foreground mb-3">SpO2 — 20 dernières mesures</h4>
                       <ResponsiveContainer width="100%" height={180}>
@@ -912,7 +1008,6 @@ const DoctorPatientFiche = () => {
                       </ResponsiveContainer>
                     </div>
 
-                    {/* Graphe Température */}
                     <div>
                       <h4 className="text-xs font-semibold text-foreground mb-3">Température — 20 dernières mesures</h4>
                       <ResponsiveContainer width="100%" height={180}>

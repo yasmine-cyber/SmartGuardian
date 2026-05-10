@@ -42,6 +42,7 @@ import PatientHistory   from "@/pages/PatientHistory";
 import PatientMedecins  from "@/pages/PatientMedecins";
 import PatientEmergency from "@/pages/PatientEmergency";
 import PatientSettings  from "@/pages/PatientSettings";
+import PatientAnalyses  from "@/pages/PatientAnalyses"; // ✅ added
 import PaymentSuccess from "@/pages/PaymentSuccess";
 import PaymentCancel  from "@/pages/PaymentCancel";
 import Checkout from "@/pages/Checkout";
@@ -62,15 +63,10 @@ const SupabaseHashHandler = () => {
     if (!accessToken) return;
 
     if (type === "recovery") {
-      // Réinitialisation de mot de passe
       navigate(`/reset-password${hash}`, { replace: true });
     } else if (type === "invite") {
-      // Invitation médecin
       navigate(`/set-password${hash}`, { replace: true });
     } else if (type === "signup") {
-      // ✅ Confirmation email après inscription
-      // Supabase a déjà connecté l'utilisateur via le token dans le hash
-      // On redirige vers /auth/callback qui gère la redirection selon le rôle
       navigate(`/auth/callback`, { replace: true });
     }
   }, [navigate]);
@@ -101,26 +97,27 @@ const App = () => (
           <Route path="/payment-cancel"  element={<PaymentCancel />} />
 
           {/* Patient */}
-          <Route path="/patient"           element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
-          <Route path="/patient/profile"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
-          <Route path="/patient/medecins"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMedecins /></ProtectedRoute>} />
-          <Route path="/patient/messages"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
-          <Route path="/patient/vitals"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientVitals /></ProtectedRoute>} />
-          <Route path="/patient/alerts"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientAlerts /></ProtectedRoute>} />
-          <Route path="/patient/history"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientHistory /></ProtectedRoute>} />
-          <Route path="/patient/emergency" element={<ProtectedRoute allowedRoles={["patient"]}><PatientEmergency /></ProtectedRoute>} />
-          <Route path="/patient/settings"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientSettings /></ProtectedRoute>} />
-          <Route path="/patient/*"         element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
+          <Route path="/patient"            element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
+          <Route path="/patient/profile"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientProfile /></ProtectedRoute>} />
+          <Route path="/patient/medecins"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientMedecins /></ProtectedRoute>} />
+          <Route path="/patient/messages"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientMessages /></ProtectedRoute>} />
+          <Route path="/patient/vitals"     element={<ProtectedRoute allowedRoles={["patient"]}><PatientVitals /></ProtectedRoute>} />
+          <Route path="/patient/alerts"     element={<ProtectedRoute allowedRoles={["patient"]}><PatientAlerts /></ProtectedRoute>} />
+          <Route path="/patient/history"    element={<ProtectedRoute allowedRoles={["patient"]}><PatientHistory /></ProtectedRoute>} />
+          <Route path="/patient/emergency"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientEmergency /></ProtectedRoute>} />
+          <Route path="/patient/settings"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientSettings /></ProtectedRoute>} />
+          <Route path="/patient/analyses"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientAnalyses /></ProtectedRoute>} /> {/* ✅ added */}
+          <Route path="/patient/*"          element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
 
           {/* Doctor */}
-          <Route path="/doctor"            element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
-          <Route path="/doctor/patients"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
-          <Route path="/doctor/alerts"     element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
-          <Route path="/doctor/analytics"  element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAnalytics /></ProtectedRoute>} />
-          <Route path="/doctor/messages"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
-          <Route path="/doctor/settings"   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
-          <Route path="/doctor/*"          element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
-          <Route path="/doctor/patients/:patientId" element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatientFiche /></ProtectedRoute>} />
+          <Route path="/doctor"                             element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
+          <Route path="/doctor/patients"                    element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatients /></ProtectedRoute>} />
+          <Route path="/doctor/alerts"                      element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAlerts /></ProtectedRoute>} />
+          <Route path="/doctor/analytics"                   element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorAnalytics /></ProtectedRoute>} />
+          <Route path="/doctor/messages"                    element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorMessages /></ProtectedRoute>} />
+          <Route path="/doctor/settings"                    element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorSettings /></ProtectedRoute>} />
+          <Route path="/doctor/patients/:patientId"         element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorPatientFiche /></ProtectedRoute>} /> {/* ✅ before wildcard */}
+          <Route path="/doctor/*"                           element={<ProtectedRoute allowedRoles={["medecin"]}><DoctorDashboard /></ProtectedRoute>} />
 
           {/* Family */}
           <Route path="/family"            element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
