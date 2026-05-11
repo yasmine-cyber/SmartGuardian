@@ -29,9 +29,13 @@ const DoctorAnalytics = () => {
       }
 
       const { data, error } = await supabase
-        .from("patients")
-        .select("id, status")
-        .eq("medecin_id", user.id);
+  .from("patients")
+  .select("id, status")
+  .eq("medecin_id", user.id);
+
+console.log("user.id:", user.id);
+console.log("data:", data);
+console.log("error:", error);
 
       if (error) {
         console.error("DoctorAnalytics: failed to fetch patients", error);
@@ -64,16 +68,16 @@ const DoctorAnalytics = () => {
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-foreground">Analyses</h1>
           <p className="text-muted-foreground text-sm mt-1">
-            Vue d’ensemble de l’état de vos patients
+            Vue d'ensemble de l'état de vos patients
           </p>
         </motion.div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[
-            { icon: Users, label: "Total patients", value: total, color: "text-primary" },
-            { icon: TrendingUp, label: "Stables", value: stats.stable, color: "text-green-500" },
+            { icon: Users,    label: "Total patients",    value: total,          color: "text-primary"    },
+            { icon: TrendingUp, label: "Stables",         value: stats.stable,   color: "text-green-500"  },
             { icon: Activity, label: "Sous surveillance", value: stats.attention, color: "text-yellow-500" },
-            { icon: BarChart3, label: "Critiques", value: stats.critical, color: "text-red-500" },
+            { icon: BarChart3, label: "Critiques",        value: stats.critical, color: "text-red-500"    },
           ].map((s, i) => (
             <motion.div
               key={i}

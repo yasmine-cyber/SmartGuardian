@@ -135,7 +135,7 @@ const AdminDevices = () => {
 
       if (error) throw error;
 
-      setAddDeviceSuccess(`✅ Capteur ajouté : ${data.id}`);
+      setAddDeviceSuccess(`✅ Dispositif ajouté : ${data.id}`);
       queryClient.invalidateQueries({ queryKey: ["admin-devices"] });
       setTimeout(() => setAddDeviceSuccess(""), 6000);
     } catch (e: any) {
@@ -147,7 +147,7 @@ const AdminDevices = () => {
 
   // ── Delete device (only if free) ──
   const handleDeleteDevice = async (deviceId: string) => {
-    if (!confirm("Supprimer ce capteur ? Cette action est irréversible.")) return;
+    if (!confirm("Supprimer ce dispositif ? Cette action est irréversible.")) return;
     setDeleteDeviceLoading(deviceId);
     try {
       const { error } = await supabase
@@ -191,12 +191,12 @@ const AdminDevices = () => {
             <div className="flex items-center gap-3">
               <Cpu className="w-6 h-6 text-primary" />
               <div>
-                <h1 className="text-2xl font-bold text-foreground">Capteurs IoT</h1>
+                <h1 className="text-2xl font-bold text-foreground">Dispositifs IoT</h1>
                 <p className="text-muted-foreground text-sm mt-0.5">
                   État des appareils ESP32
                   {devices && (
                     <span className="ml-2">
-                      · <span className="text-primary">{devices.length} capteur{devices.length > 1 ? "s" : ""}</span>
+                      · <span className="text-primary">{devices.length} dispositif{devices.length > 1 ? "s" : ""}</span>
                       · <span className="text-green-600">{freeCount} libre{freeCount > 1 ? "s" : ""}</span>
                       · <span className="text-blue-600">{assignedCount} assigné{assignedCount > 1 ? "s" : ""}</span>
                     </span>
@@ -205,21 +205,21 @@ const AdminDevices = () => {
               </div>
             </div>
 
-            {/* ✅ Bouton Ajouter */}
+            {/* Bouton Ajouter */}
             <button
               onClick={() => { setShowAddDevice(v => !v); setAddDeviceError(""); setAddDeviceSuccess(""); }}
               className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm bg-primary text-primary-foreground hover:brightness-110 transition-all">
               {showAddDevice ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-              {showAddDevice ? "Fermer" : "Ajouter un capteur"}
+              {showAddDevice ? "Fermer" : "Ajouter un dispositif"}
             </button>
           </div>
         </motion.div>
 
-        {/* ✅ Add device panel */}
+        {/* Add device panel */}
         {showAddDevice && (
           <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
             className="bg-card border border-border rounded-2xl p-5 shadow-sm">
-            <h3 className="text-sm font-semibold text-card-foreground mb-2">Nouveau capteur</h3>
+            <h3 className="text-sm font-semibold text-card-foreground mb-2">Nouveau dispositif</h3>
             <p className="text-xs text-muted-foreground mb-4">
               Un UUID unique sera généré automatiquement. Vous pourrez ensuite scanner le QR code
               pour associer le bracelet physique à un patient.
@@ -231,7 +231,7 @@ const AdminDevices = () => {
                 className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
                 {addDeviceLoading
                   ? <><Loader className="w-4 h-4 animate-spin" /> Création...</>
-                  : <><RefreshCw className="w-4 h-4" /> Générer un nouveau capteur</>
+                  : <><RefreshCw className="w-4 h-4" /> Générer un nouveau dispositif</>
                 }
               </button>
               {addDeviceSuccess && (
@@ -251,27 +251,27 @@ const AdminDevices = () => {
         {isLoading && (
           <div className="flex items-center justify-center gap-2 py-20 text-muted-foreground">
             <Loader className="w-5 h-5 animate-spin" />
-            <span className="text-sm">Chargement des capteurs...</span>
+            <span className="text-sm">Chargement des dispositifs...</span>
           </div>
         )}
 
         {error && (
           <div className="bg-destructive/10 border border-destructive/20 rounded-2xl p-4 text-sm text-destructive">
-            Impossible de charger les capteurs.
+            Impossible de charger les dispositifs.
           </div>
         )}
 
         {!isLoading && devices?.length === 0 && (
           <div className="bg-card border border-border rounded-2xl p-16 text-center">
             <Cpu className="w-12 h-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-sm font-medium text-card-foreground">Aucun capteur enregistré</p>
+            <p className="text-sm font-medium text-card-foreground">Aucun dispositif enregistré</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Cliquez sur "Ajouter un capteur" pour enregistrer un bracelet.
+              Cliquez sur "Ajouter un dispositif" pour enregistrer un bracelet.
             </p>
           </div>
         )}
 
-        {/* ✅ Devices grid */}
+        {/* Devices grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {(devices || []).map((d, i) => {
             const signal = getSignalBars(d.actif, d.dernier_signal);
@@ -295,12 +295,10 @@ const AdminDevices = () => {
                     </span>
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
-                    {/* Badge libre/assigné */}
                     {isFree
                       ? <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/10 text-green-600 font-medium">Libre</span>
                       : <span className="text-xs px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 font-medium">Assigné</span>
                     }
-                    {/* Badge en ligne/hors ligne */}
                     {d.actif
                       ? <div className="flex items-center gap-1 text-green-600 text-xs"><Wifi className="w-3 h-3" /> En ligne</div>
                       : <div className="flex items-center gap-1 text-muted-foreground text-xs"><WifiOff className="w-3 h-3" /> Hors ligne</div>
@@ -336,7 +334,6 @@ const AdminDevices = () => {
                   </span>
 
                   <div className="flex items-center gap-1">
-                    {/* ✅ Bouton QR code — toujours disponible */}
                     <button
                       onClick={() => handleShowQr(d.id)}
                       disabled={qrLoading === d.id}
@@ -348,7 +345,6 @@ const AdminDevices = () => {
                       QR Code
                     </button>
 
-                    {/* ✅ Supprimer seulement si libre */}
                     {isFree && (
                       <button
                         onClick={() => handleDeleteDevice(d.id)}
@@ -369,7 +365,7 @@ const AdminDevices = () => {
         </div>
       </div>
 
-      {/* ✅ QR Code Modal */}
+      {/* QR Code Modal */}
       {qrModal && (
         <div
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"

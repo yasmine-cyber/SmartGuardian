@@ -47,7 +47,7 @@ const navItems: Record<Role, NavItem[]> = {
   admin: [
     { icon: Home,     label: "Vue système",    path: "/admin" },
     { icon: Users,    label: "Utilisateurs",   path: "/admin/users" },
-    { icon: Cpu,      label: "Capteurs IoT",   path: "/admin/devices" },
+    { icon: Cpu,      label: "Dispositifs IoT",   path: "/admin/devices" },
     { icon: Shield,   label: "Rôles & Accès",  path: "/admin/roles" },
     { icon: Activity, label: "Seuils d'alerte", path: "/admin/thresholds" },
     { icon: FileText, label: "Journaux",        path: "/admin/logs" },
