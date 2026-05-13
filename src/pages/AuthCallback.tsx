@@ -8,7 +8,6 @@ const AuthCallback = () => {
 
   useEffect(() => {
     const handleCallback = async () => {
-      // Supabase lit automatiquement le token depuis l'URL (hash ou query param)
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session?.user) {
@@ -19,13 +18,13 @@ const AuthCallback = () => {
       const user = session.user;
       const metadata = user.user_metadata || {};
 
-      // Extraire le nom depuis les métadonnées Google
+      // Extract name from Google metadata
       const fullName: string = metadata.full_name || metadata.name || "";
       const parts = fullName.trim().split(/\s+/);
       const prenom = parts[0] || "";
       const nom = parts.slice(1).join(" ") || "";
 
-      // Vérifier si l'utilisateur existe dans `utilisateurs`
+      // Check if user exists in `utilisateurs`
       const { data: existing } = await supabase
         .from("utilisateurs")
         .select("role, nom, prenom, telephone")
@@ -33,7 +32,7 @@ const AuthCallback = () => {
         .single();
 
       if (!existing) {
-        // Nouvel utilisateur Google — insérer et aller compléter le profil
+        // New Google user → insert and complete profile
         await supabase.from("utilisateurs").insert({
           id: user.id,
           email: user.email,
@@ -45,14 +44,14 @@ const AuthCallback = () => {
         return;
       }
 
-      // Profil incomplet → compléter
+      // Incomplete profile → complete it
       const isIncomplete = !existing.telephone || !existing.nom || existing.nom === "Utilisateur";
       if (isIncomplete) {
         navigate("/complete-profile");
         return;
       }
 
-      // ── Patient : vérifier si le paiement a déjà été effectué ──
+      // ── Patient: check payment + device request status ──
       if (existing.role === "patient") {
         const { data: patientRow } = await supabase
           .from("patients")
@@ -60,27 +59,60 @@ const AuthCallback = () => {
           .eq("user_id", user.id)
           .single();
 
-        if (patientRow) {
-          const { data: deviceReq } = await supabase
-            .from("device_requests")
-            .select("payment_status")
-            .eq("patient_id", patientRow.id)
-            .eq("payment_status", "paid")
-            .maybeSingle();
-
-          if (!deviceReq) {
-            // Pas encore payé → rediriger vers la page de paiement
-            navigate("/checkout");
-            return;
-          }
-        } else {
-          // Ligne patient manquante (cas rare) → aller au checkout quand même
+        if (!patientRow) {
           navigate("/checkout");
           return;
         }
+
+        // Get latest device request
+        const { data: deviceReq } = await supabase
+          .from("device_requests")
+          .select("payment_status, status, device_id")
+          .eq("patient_id", patientRow.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        // No request or not paid yet → send to checkout
+        if (!deviceReq || deviceReq.payment_status !== "paid") {
+          navigate("/checkout");
+          return;
+        }
+
+        // Paid but not yet approved → send to pending page
+        if (deviceReq.status === "pending") {
+          navigate("/pending");
+          return;
+        }
+
+        // Approved: check if device was activated via mobile QR scan
+        if (deviceReq.status === "approved" && deviceReq.device_id) {
+          const { data: device } = await supabase
+            .from("devices")
+            .select("actif")
+            .eq("id", deviceReq.device_id)
+            .single();
+
+          if (!device?.actif) {
+            // Device assigned but QR not scanned yet → stay on pending
+            navigate("/pending");
+            return;
+          }
+          // Device active → fall through to dashboard
+        }
+
+        // Rejected → back to checkout so they can re-request
+        if (deviceReq.status === "rejected") {
+          navigate("/checkout");
+          return;
+        }
+
+        // Completed or active device → go to dashboard
+        navigate("/patient");
+        return;
       }
 
-      // Redirection selon le rôle
+      // Role-based redirect for non-patients
       const dashboardMap: Record<string, string> = {
         patient: "/patient",
         medecin: "/doctor",

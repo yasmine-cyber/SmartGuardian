@@ -6,6 +6,8 @@ import VitalCard from "@/components/VitalCard";
 import LiveECGChart from "@/components/LiveECGChart";
 import StatusBadge from "@/components/StatusBadge";
 import { supabase } from "@/lib/supabase";
+import { useNavigate } from "react-router-dom";
+
 
 interface VitalSigns {
   bpm: number | null;
@@ -30,6 +32,7 @@ const PatientDashboard = () => {
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [patientId, setPatientId] = useState<string | null>(null);
   const [loadingVitals, setLoadingVitals] = useState(true);
+  const navigate = useNavigate();
 
   // ━━━━━━━━━━━━━━━━━━━━━━━━
   // Déterminer status selon valeurs
@@ -70,8 +73,46 @@ const PatientDashboard = () => {
   // ━━━━━━━━━━━━━━━━━━━━━━━━
   useEffect(() => {
     const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+        // ── Device activation guard ──────────────────────────
+        const { data: patientRow } = await supabase
+          .from("patients")
+          .select("id")
+          .eq("user_id", user.id)
+          .single();
+
+        if (!patientRow) { navigate("/checkout"); return; }
+
+        const { data: req } = await supabase
+          .from("device_requests")
+          .select("status, payment_status, device_id")
+          .eq("patient_id", patientRow.id)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!req || req.payment_status !== "paid") {
+          navigate("/checkout"); return;
+        }
+
+        if (req.status === "pending") {
+          navigate("/pending"); return;
+        }
+
+        if (req.status === "approved" && req.device_id) {
+          const { data: device } = await supabase
+            .from("devices")
+            .select("actif")
+            .eq("id", req.device_id)
+            .single();
+          if (!device?.actif) { navigate("/pending"); return; }
+        }
+
+        if (req.status === "rejected") {
+          navigate("/checkout"); return;
+        }
 
       // Nom utilisateur
       const { data: util } = await supabase
