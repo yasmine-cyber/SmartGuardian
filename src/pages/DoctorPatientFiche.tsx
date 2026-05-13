@@ -66,6 +66,9 @@ const ANALYSE_TYPES = [
   "Scanner", "IRM", "Électrocardiogramme", "Analyse urine", "Autre",
 ];
 
+// ─── YOUR BUCKET NAME — change this to match your Supabase Storage bucket ────
+const ANALYSES_BUCKET = "analyses";
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const age = (dob: string) => {
@@ -135,6 +138,28 @@ const getBpmStatus  = (v: number | null): "safe" | "warning" | "critical" => { i
 const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v < 90) return "critical"; if (v < 95) return "warning"; return "safe"; };
 const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v > 39.5 || v < 35) return "critical"; if (v > 37.5) return "warning"; return "safe"; };
 
+// ─── Extract storage path from any form of file_url ──────────────────────────
+// Handles three cases:
+//   1. Raw path:       "analyses/uuid/file.pdf"
+//   2. Public URL:     "https://.../storage/v1/object/public/analyses/uuid/file.pdf"
+//   3. Signed URL:     "https://.../storage/v1/object/sign/analyses/uuid/file.pdf?token=..."
+const extractStoragePath = (fileUrl: string): string => {
+  try {
+    if (!fileUrl.startsWith("http")) return fileUrl; // already a raw path
+    const url = new URL(fileUrl);
+    const pathname = url.pathname;
+    // match /object/public/<bucket>/<path> or /object/sign/<bucket>/<path>
+    const match = pathname.match(/\/object\/(?:public|sign)\/[^/]+\/(.+)/);
+    if (match) return match[1];
+    // fallback: return everything after the bucket name
+    const bucketIndex = pathname.indexOf(`/${ANALYSES_BUCKET}/`);
+    if (bucketIndex !== -1) return pathname.slice(bucketIndex + ANALYSES_BUCKET.length + 2);
+  } catch {
+    // not a valid URL, treat as raw path
+  }
+  return fileUrl;
+};
+
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
 const Section = ({ title, icon, children, className = "", action }: {
@@ -195,6 +220,7 @@ const DoctorPatientFiche = () => {
   const [showAnalyseForm, setShowAnalyseForm] = useState(false);
   const [analyseLoading, setAnalyseLoading]   = useState(false);
   const [analyseForm, setAnalyseForm]         = useState({ type: "", note_medecin: "" });
+  const [openingFile, setOpeningFile]         = useState<string | null>(null); // tracks which analyse id is loading
 
   // ── Realtime vitals ──
   const [deviceId, setDeviceId]     = useState<string | null>(null);
@@ -260,7 +286,10 @@ const DoctorPatientFiche = () => {
 
     const { data: devData } = await supabase
       .from("devices").select("id, actif, dernier_signal")
-      .eq("patient_id", patientId).order("created_at", { ascending: false }).limit(1).maybeSingle();
+      .eq("patient_id", patientId)
+      .order("created_at", { ascending: false })
+      .limit(1).maybeSingle();
+
     setDevice(devData as Device | null);
 
     if (devData) {
@@ -465,6 +494,29 @@ const DoctorPatientFiche = () => {
     if (!error && patient) {
       await loadAnalyses(patient.id);
       toast.success("Analyse marquée comme consultée.");
+    }
+  };
+
+  // ─── Handler: Open analyse file via signed URL ─────────────────────────────
+  const handleOpenAnalyse = async (analyseId: string, fileUrl: string, fileName: string) => {
+    setOpeningFile(analyseId);
+    try {
+      const path = extractStoragePath(fileUrl);
+      const { data, error } = await supabase.storage
+        .from(ANALYSES_BUCKET)
+        .createSignedUrl(path, 60 * 60); // 1-hour expiry
+
+      if (error || !data?.signedUrl) {
+        console.error("Signed URL error:", error);
+        toast.error("Impossible d'ouvrir le fichier. Vérifiez le nom du bucket.");
+        return;
+      }
+      window.open(data.signedUrl, "_blank", "noopener,noreferrer");
+    } catch (err) {
+      console.error("Open analyse error:", err);
+      toast.error("Erreur lors de l'ouverture du fichier");
+    } finally {
+      setOpeningFile(null);
     }
   };
 
@@ -735,30 +787,52 @@ const DoctorPatientFiche = () => {
                             {a.statut === "demandee" ? "En attente" : a.statut === "soumise" ? "Résultat reçu" : "Consultée"}
                           </span>
                         </div>
-                        {a.note_medecin && <p className="text-[11px] text-muted-foreground italic leading-relaxed">{a.note_medecin}</p>}
+
+                        {a.note_medecin && (
+                          <p className="text-[11px] text-muted-foreground italic leading-relaxed">{a.note_medecin}</p>
+                        )}
+
                         <p className="text-[10px] text-muted-foreground">
                           {format(new Date(a.created_at), "dd MMM yyyy", { locale: fr })}
                           {a.submitted_at && ` · Soumis ${formatDistanceToNow(new Date(a.submitted_at), { addSuffix: true, locale: fr })}`}
                         </p>
+
+                        {/* ── Statut: soumise — show file + mark as viewed ── */}
                         {a.statut === "soumise" && (
                           <div className="flex items-center gap-2 flex-wrap">
                             {a.file_url && (
-                              <a href={a.file_url} target="_blank" rel="noopener noreferrer"
-                                className="flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                                <FileText className="w-3 h-3" />{a.file_name || "Voir le document"}
-                              </a>
+                              <button
+                                onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
+                                disabled={openingFile === a.id}
+                                className="flex items-center gap-1 text-xs text-blue-600 hover:underline disabled:opacity-60"
+                              >
+                                {openingFile === a.id
+                                  ? <Loader className="w-3 h-3 animate-spin" />
+                                  : <FileText className="w-3 h-3" />}
+                                {a.file_name || "Voir le document"}
+                              </button>
                             )}
-                            <button onClick={() => handleMarquerVue(a.id)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
+                            <button
+                              onClick={() => handleMarquerVue(a.id)}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all"
+                            >
                               <CheckCircle className="w-3 h-3" /> Marquer comme vue
                             </button>
                           </div>
                         )}
+
+                        {/* ── Statut: vue — show file link only ── */}
                         {a.statut === "vue" && a.file_url && (
-                          <a href={a.file_url} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors">
-                            <FileText className="w-3 h-3" />{a.file_name || "Voir le document"}
-                          </a>
+                          <button
+                            onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
+                            disabled={openingFile === a.id}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-60"
+                          >
+                            {openingFile === a.id
+                              ? <Loader className="w-3 h-3 animate-spin" />
+                              : <FileText className="w-3 h-3" />}
+                            {a.file_name || "Voir le document"}
+                          </button>
                         )}
                       </div>
                     ))}
@@ -979,48 +1053,57 @@ const DoctorPatientFiche = () => {
                       )}
                     </div>
 
-                    <div>
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-semibold text-foreground">Fréquence Cardiaque — 20 dernières mesures</h4>
-                        <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" style={{ animationDuration: "3s" }} />
+                    {vitalsHistory.length === 0 ? (
+                      <div className="text-center py-10 text-muted-foreground text-sm">
+                        <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        En attente des premières mesures...
                       </div>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis domain={[40, 160]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                          <Line type="monotone" dataKey="BPM" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                    ) : (
+                      <>
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <h4 className="text-xs font-semibold text-foreground">Fréquence Cardiaque — 20 dernières mesures</h4>
+                            <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" style={{ animationDuration: "3s" }} />
+                          </div>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <LineChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <YAxis domain={[40, 160]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                              <Line type="monotone" dataKey="BPM" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
 
-                    <div>
-                      <h4 className="text-xs font-semibold text-foreground mb-3">SpO2 — 20 dernières mesures</h4>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis domain={[80, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                          <Line type="monotone" dataKey="SpO2" stroke="hsl(var(--safe))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-foreground mb-3">SpO2 — 20 dernières mesures</h4>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <LineChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <YAxis domain={[80, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                              <Line type="monotone" dataKey="SpO2" stroke="hsl(var(--safe))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
 
-                    <div>
-                      <h4 className="text-xs font-semibold text-foreground mb-3">Température — 20 dernières mesures</h4>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <LineChart data={chartData}>
-                          <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                          <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <YAxis domain={[35, 41]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                          <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                          <ReferenceLine y={37.5} stroke="#f97316" strokeDasharray="4 2" strokeOpacity={0.5} />
-                          <Line type="monotone" dataKey="Température" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                        </LineChart>
-                      </ResponsiveContainer>
-                    </div>
+                        <div>
+                          <h4 className="text-xs font-semibold text-foreground mb-3">Température — 20 dernières mesures</h4>
+                          <ResponsiveContainer width="100%" height={180}>
+                            <LineChart data={chartData}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <YAxis domain={[35, 41]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
+                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
+                              <ReferenceLine y={37.5} stroke="#f97316" strokeDasharray="4 2" strokeOpacity={0.5} />
+                              <Line type="monotone" dataKey="Température" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                            </LineChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </>
+                    )}
                   </>
                 )}
               </div>
