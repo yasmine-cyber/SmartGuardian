@@ -66,8 +66,8 @@ const ANALYSE_TYPES = [
   "Scanner", "IRM", "Électrocardiogramme", "Analyse urine", "Autre",
 ];
 
-// ─── YOUR BUCKET NAME — change this to match your Supabase Storage bucket ────
-const ANALYSES_BUCKET = "analyses";
+// ─── FIX: Correct bucket name ─────────────────────────────────────────────────
+const ANALYSES_BUCKET = "medical-analyses";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -138,24 +138,21 @@ const getBpmStatus  = (v: number | null): "safe" | "warning" | "critical" => { i
 const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v < 90) return "critical"; if (v < 95) return "warning"; return "safe"; };
 const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v > 39.5 || v < 35) return "critical"; if (v > 37.5) return "warning"; return "safe"; };
 
-// ─── Extract storage path from any form of file_url ──────────────────────────
-// Handles three cases:
-//   1. Raw path:       "analyses/uuid/file.pdf"
-//   2. Public URL:     "https://.../storage/v1/object/public/analyses/uuid/file.pdf"
-//   3. Signed URL:     "https://.../storage/v1/object/sign/analyses/uuid/file.pdf?token=..."
+// ─── FIX: Extract storage path from full Supabase public URL ─────────────────
+// The file_url stored in DB is a full public URL like:
+//   https://<project>.supabase.co/storage/v1/object/public/medical-analyses/analyses/UUID/file.pdf
+// We need to extract everything AFTER the bucket name:
+//   analyses/UUID/file.pdf
+// That is the correct path to pass to createSignedUrl on the "medical-analyses" bucket.
 const extractStoragePath = (fileUrl: string): string => {
   try {
-    if (!fileUrl.startsWith("http")) return fileUrl; // already a raw path
     const url = new URL(fileUrl);
     const pathname = url.pathname;
-    // match /object/public/<bucket>/<path> or /object/sign/<bucket>/<path>
+    // Match /object/public/<bucket>/<path> or /object/sign/<bucket>/<path>
     const match = pathname.match(/\/object\/(?:public|sign)\/[^/]+\/(.+)/);
     if (match) return match[1];
-    // fallback: return everything after the bucket name
-    const bucketIndex = pathname.indexOf(`/${ANALYSES_BUCKET}/`);
-    if (bucketIndex !== -1) return pathname.slice(bucketIndex + ANALYSES_BUCKET.length + 2);
   } catch {
-    // not a valid URL, treat as raw path
+    // Not a valid URL — return as-is (treat as raw storage path)
   }
   return fileUrl;
 };
@@ -220,7 +217,7 @@ const DoctorPatientFiche = () => {
   const [showAnalyseForm, setShowAnalyseForm] = useState(false);
   const [analyseLoading, setAnalyseLoading]   = useState(false);
   const [analyseForm, setAnalyseForm]         = useState({ type: "", note_medecin: "" });
-  const [openingFile, setOpeningFile]         = useState<string | null>(null); // tracks which analyse id is loading
+  const [openingFile, setOpeningFile]         = useState<string | null>(null);
 
   // ── Realtime vitals ──
   const [deviceId, setDeviceId]     = useState<string | null>(null);
@@ -497,20 +494,24 @@ const DoctorPatientFiche = () => {
     }
   };
 
-  // ─── Handler: Open analyse file via signed URL ─────────────────────────────
+  // ─── Handler: Open analyse file via signed URL (FIXED) ────────────────────
+  // Bucket: "medical-analyses"
+  // Path inside bucket: "analyses/UUID/filename.pdf"
   const handleOpenAnalyse = async (analyseId: string, fileUrl: string, fileName: string) => {
     setOpeningFile(analyseId);
     try {
       const path = extractStoragePath(fileUrl);
+
       const { data, error } = await supabase.storage
         .from(ANALYSES_BUCKET)
         .createSignedUrl(path, 60 * 60); // 1-hour expiry
 
       if (error || !data?.signedUrl) {
         console.error("Signed URL error:", error);
-        toast.error("Impossible d'ouvrir le fichier. Vérifiez le nom du bucket.");
+        toast.error("Impossible d'ouvrir le fichier.");
         return;
       }
+
       window.open(data.signedUrl, "_blank", "noopener,noreferrer");
     } catch (err) {
       console.error("Open analyse error:", err);

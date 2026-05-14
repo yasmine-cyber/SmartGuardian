@@ -34,11 +34,14 @@ const statutIcon: Record<string, React.ReactNode> = {
   vue:      <Eye className="w-3.5 h-3.5" />,
 };
 
+const BUCKET = "medical-analyses";
+
 const PatientAnalyses = () => {
   const [analyses, setAnalyses]       = useState<Analyse[]>([]);
   const [patientId, setPatientId]     = useState<string | null>(null);
   const [loading, setLoading]         = useState(true);
   const [uploadingId, setUploadingId] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const fileInputRef                  = useRef<HTMLInputElement>(null);
   const activeAnalyseId               = useRef<string | null>(null);
 
@@ -90,7 +93,6 @@ const PatientAnalyses = () => {
     const analyseId = activeAnalyseId.current;
     if (!file || !analyseId) return;
 
-    // Only PDF
     if (file.type !== "application/pdf") {
       toast.error("Veuillez sélectionner un fichier PDF");
       e.target.value = "";
@@ -100,7 +102,7 @@ const PatientAnalyses = () => {
     setUploadingId(analyseId);
     const path = `analyses/${analyseId}/${Date.now()}-${file.name}`;
     const { error: upErr } = await supabase.storage
-      .from("medical-analyses").upload(path, file, { upsert: true });
+      .from(BUCKET).upload(path, file, { upsert: true });
     e.target.value = "";
 
     if (upErr) {
@@ -109,7 +111,7 @@ const PatientAnalyses = () => {
       return;
     }
 
-    const { data: urlData } = supabase.storage.from("medical-analyses").getPublicUrl(path);
+    const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
 
     const { error: updateErr } = await supabase.from("medical_analyses").update({
       statut: "soumise",
@@ -130,6 +132,42 @@ const PatientAnalyses = () => {
       toast.success("Résultat envoyé à votre médecin !");
     }
     setUploadingId(null);
+  };
+
+  /**
+   * Extract the storage path from a full Supabase public URL, then generate
+   * a short-lived signed URL so the file can be downloaded even when the
+   * bucket is NOT set to public.
+   *
+   * URL shape:  https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+   */
+  const handleDownload = async (analyseId: string, fileUrl: string, fileName: string) => {
+    setDownloadingId(analyseId);
+
+    const marker = `/object/public/${BUCKET}/`;
+    const pathIndex = fileUrl.indexOf(marker);
+
+    if (pathIndex === -1) {
+      // URL doesn't match expected shape — open directly as fallback
+      window.open(fileUrl, "_blank");
+      setDownloadingId(null);
+      return;
+    }
+
+    const filePath = fileUrl.slice(pathIndex + marker.length);
+
+    const { data, error } = await supabase.storage
+      .from(BUCKET)
+      .createSignedUrl(filePath, 120); // valid for 2 minutes
+
+    if (error || !data?.signedUrl) {
+      toast.error("Impossible d'ouvrir le fichier. Vérifiez vos permissions.");
+      setDownloadingId(null);
+      return;
+    }
+
+    window.open(data.signedUrl, "_blank");
+    setDownloadingId(null);
   };
 
   const pending = analyses.filter((a) => a.statut === "demandee").length;
@@ -233,16 +271,18 @@ const PatientAnalyses = () => {
                   </button>
                 )}
 
+                {/* ✅ Fixed: uses signed URL instead of direct public URL */}
                 {a.file_url && a.statut !== "demandee" && (
-                  <a
-                    href={a.file_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 text-xs text-primary hover:underline"
+                  <button
+                    onClick={() => handleDownload(a.id, a.file_url!, a.file_name || "document.pdf")}
+                    disabled={downloadingId === a.id}
+                    className="flex items-center gap-2 text-xs text-primary hover:underline disabled:opacity-50"
                   >
-                    <FileText className="w-3.5 h-3.5" />
+                    {downloadingId === a.id
+                      ? <Loader className="w-3.5 h-3.5 animate-spin" />
+                      : <FileText className="w-3.5 h-3.5" />}
                     {a.file_name || "Voir le document soumis"}
-                  </a>
+                  </button>
                 )}
               </motion.div>
             ))}

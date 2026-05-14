@@ -5,6 +5,7 @@ import {
   Home, Activity, Bell, History, AlertTriangle, User, Settings, Users,
   BarChart3, MessageSquare, Shield, Cpu, FileText, Heart,
   ChevronLeft, ChevronRight, LogOut, Menu, Wifi, FlaskConical,
+  Phone, Video, Stethoscope, CalendarCheck, Clock, ShieldCheck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
@@ -26,7 +27,7 @@ const navItems: Record<Role, NavItem[]> = {
     { icon: FlaskConical,  label: "Mes Analyses",   path: "/patient/analyses", badgeKey: "analyses" },
     { icon: Bell,          label: "Alertes",         path: "/patient/alerts" },
     { icon: History,       label: "Historique",      path: "/patient/history" },
-    { icon: AlertTriangle, label: "Urgence",         path: "/patient/emergency" },
+    { icon: Users,         label: "Proches",         path: "/patient/proches" },
     { icon: User,          label: "Profil",          path: "/patient/profile" },
     { icon: Settings,      label: "Paramètres",      path: "/patient/settings" },
   ],
@@ -73,10 +74,38 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [userName, setUserName]     = useState<string | null>(null);
   const [photoUrl, setPhotoUrl]     = useState<string | null>(null);
   const [badges, setBadges]         = useState<Record<string, number>>({});
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const [hasEmergency, setHasEmergency] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
   const items    = navItems[role];
+
+  // Live clock
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Check for active emergencies (real-time)
+  useEffect(() => {
+    if (role === "patient") {
+      const checkEmergency = async () => {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
+        const { data } = await supabase
+          .from("emergency_calls")
+          .select("id")
+          .eq("patient_id", user.id)
+          .eq("status", "active")
+          .maybeSingle();
+        setHasEmergency(!!data);
+      };
+      checkEmergency();
+      const interval = setInterval(checkEmergency, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [role]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -137,6 +166,14 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
 
   const displayName    = userName || roleNames[role];
   const displayInitial = displayName?.charAt(0) || roleNames[role].charAt(0);
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" });
+  };
+
+  const formatDate = (date: Date) => {
+    return date.toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" });
+  };
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
@@ -244,18 +281,67 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
             className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted">
             <Menu className="w-5 h-5" />
           </button>
-          <div className="hidden lg:flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="w-1.5 h-1.5 rounded-full bg-safe" />
-            <span>Capteur actif</span>
-            <span className="text-border">•</span>
-            <Wifi className="w-3 h-3" />
-            <span>Réseau cellulaire</span>
+
+          {/* CENTER: Live Date/Time + Platform Status */}
+          <div className="hidden lg:flex items-center gap-6">
+            {/* Live Clock */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <Clock className="w-3.5 h-3.5" />
+              <span className="font-mono text-sm font-medium text-foreground">{formatTime(currentTime)}</span>
+              <span className="text-border">|</span>
+              <span className="capitalize">{formatDate(currentTime)}</span>
+            </div>
+
+            {/* Platform Health Status */}
+            <div className="flex items-center gap-2 text-xs">
+              <span className="w-1.5 h-1.5 rounded-full bg-safe animate-pulse" />
+              <span className="text-muted-foreground">Plateforme active</span>
+            </div>
+
+            {/* Role-specific quick info */}
+            {role === "doctor" && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-full">
+                <Stethoscope className="w-3 h-3" />
+                <span>En consultation</span>
+              </div>
+            )}
+            {role === "patient" && hasEmergency && (
+              <div className="flex items-center gap-2 text-xs text-critical bg-critical/10 px-2.5 py-1 rounded-full animate-pulse">
+                <AlertTriangle className="w-3 h-3" />
+                <span>Urgence active</span>
+              </div>
+            )}
+            {role === "patient" && !hasEmergency && (
+              <div className="flex items-center gap-2 text-xs text-safe bg-safe/10 px-2.5 py-1 rounded-full">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Surveillance active</span>
+              </div>
+            )}
           </div>
-          <div className="flex items-center gap-3">
-            <button className="relative p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
-              <Bell className="w-5 h-5" />
-              <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-critical" />
-            </button>
+
+          {/* RIGHT: Action Buttons — NO patient buttons here */}
+          <div className="flex items-center gap-2">
+            {/* Teleconsultation Quick Action — Doctor only */}
+            {role === "doctor" && (
+              <button 
+                onClick={() => navigate("/doctor/teleconsultation")}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+              >
+                <Video className="w-3.5 h-3.5" />
+                <span>Téléconsultation</span>
+              </button>
+            )}
+
+            {/* Quick Appointment — Family only */}
+            {role === "family" && (
+              <button 
+                onClick={() => navigate("/family/appointments")}
+                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
+              >
+                <CalendarCheck className="w-3.5 h-3.5" />
+                <span>Rendez-vous</span>
+              </button>
+            )}
           </div>
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">

@@ -45,6 +45,8 @@ import PatientSettings  from "@/pages/PatientSettings";
 import PaymentSuccess from "@/pages/PaymentSuccess";
 import PaymentCancel  from "@/pages/PaymentCancel";
 import PendingActivation from "@/pages/PendingActivation";
+import PatientAnalyses from "./pages/PatientAnalyses";
+import PatientProches from "./pages/PatientProche";
 import Checkout from "@/pages/Checkout";
 
 const queryClient = new QueryClient();
@@ -112,6 +114,9 @@ const App = () => (
           <Route path="/patient/history"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientHistory /></ProtectedRoute>} />
           <Route path="/patient/emergency" element={<ProtectedRoute allowedRoles={["patient"]}><PatientEmergency /></ProtectedRoute>} />
           <Route path="/patient/settings"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientSettings /></ProtectedRoute>} />
+          <Route path="/patient/analyses"  element={<ProtectedRoute allowedRoles={["patient"]}><PatientAnalyses /></ProtectedRoute>} />
+          <Route path="/patient/proches"   element={<ProtectedRoute allowedRoles={["patient"]}><PatientProches /></ProtectedRoute>} />
+
           <Route path="/patient/*"         element={<ProtectedRoute allowedRoles={["patient"]}><PatientDashboard /></ProtectedRoute>} />
 
           {/* Doctor */}
