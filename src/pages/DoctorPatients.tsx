@@ -33,7 +33,7 @@ interface Demande {
     id: string;
     date_naissance: string | null;
     maladies: string[];
-    medecin_id: string | null; // ancien médecin — nécessaire pour notifier
+    medecin_id: string | null;
     utilisateurs: { nom: string; prenom: string; telephone: string | null } | null;
   } | null;
 }
@@ -61,7 +61,8 @@ const DoctorPatients = () => {
   const loadPatients = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
-    const { data: patientsData } = await supabase
+
+    const { data: patientsData, error } = await supabase
       .from("patients")
       .select(`
         id,
@@ -72,9 +73,12 @@ const DoctorPatients = () => {
         antecedents,
         notes_medecin,
         status,
-        utilisateurs!patients_user_id_fkey (nom, prenom, telephone)
+        utilisateurs:user_id (nom, prenom, telephone)
       `)
       .eq("medecin_id", user.id);
+
+    if (error) console.error("loadPatients error:", error);
+
     if (patientsData) {
       const mapped = patientsData.map((p: any) => ({
         id: p.id,
@@ -95,28 +99,37 @@ const DoctorPatients = () => {
   };
 
   const loadDemandes = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-    const { data: demandesRaw } = await supabase
-      .from("demandes")
-      .select("id, patient_id, statut, created_at")
-      .eq("medecin_id", user.id)
-      .eq("statut", "en_attente");
-    if (demandesRaw?.length) {
-      const pIds = demandesRaw.map((d: any) => d.patient_id);
-      const { data: patientsInfo } = await supabase
-        .from("patients")
-        // ← on inclut medecin_id pour savoir qui notifier
-        .select("id, date_naissance, maladies, medecin_id, utilisateurs!patients_user_id_fkey(nom, prenom, telephone)")
-        .in("id", pIds);
-      const merged = demandesRaw.map((d: any) => ({
-        ...d,
-        patients: patientsInfo?.find((p: any) => p.id === d.patient_id) || null,
+    const { data, error } = await supabase.rpc("get_demandes_for_medecin");
+
+    if (error) {
+      console.error("Erreur loadDemandes:", error);
+      setLoadingDemandes(false);
+      return;
+    }
+
+    if (data?.length) {
+      const mapped: Demande[] = data.map((row: any) => ({
+        id: row.demande_id,
+        patient_id: row.patient_id,
+        statut: row.statut,
+        created_at: row.created_at,
+        patients: {
+          id: row.patient_id,
+          date_naissance: row.date_naissance,
+          maladies: row.maladies || [],
+          medecin_id: row.medecin_id,
+          utilisateurs: {
+            nom: row.nom || "",
+            prenom: row.prenom || "",
+            telephone: row.telephone || null,
+          },
+        },
       }));
-      setDemandes(merged as Demande[]);
+      setDemandes(mapped);
     } else {
       setDemandes([]);
     }
+
     setLoadingDemandes(false);
   };
 
@@ -190,9 +203,6 @@ const DoctorPatients = () => {
     if (convId) navigate(`/doctor/messages?conversation=${convId}`);
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-  // Accepter / Refuser une demande de changement de médecin
-  // ─────────────────────────────────────────────────────────────────────────────
   const handleDemande = async (
     demandeId: string,
     patientRow: Demande["patients"],
@@ -202,23 +212,23 @@ const DoctorPatients = () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // 1. Mettre à jour le statut de la demande
-    const { error: errDemande } = await supabase
-      .from("demandes")
-      .update({ statut: action, updated_at: new Date().toISOString() })
-      .eq("id", demandeId);
-
-    if (errDemande) {
-      toast.error("Impossible de mettre à jour la demande.");
-      return;
-    }
-
     if (action === "approuvee") {
-      const ancienMedecinId = patientRow.medecin_id; // peut être null (1er médecin)
+      // ✅ Pass both p_demande_id AND p_medecin_id — the function signature requires both
+      const { error: errAccept, data: dataAccept } = await supabase.rpc("accept_demande", {
+        p_demande_id: demandeId,
+        p_medecin_id: user.id,
+      });
 
-      // 2. Récupérer les infos de l'ancien médecin pour l'email (avant de l'écraser)
-      let ancienMedecinEmail: string | null = null;
-      let ancienMedecinNom: string | null = null;
+      console.log("accept_demande result:", { dataAccept, errAccept });
+
+      if (errAccept) {
+        console.error("Erreur accept_demande:", errAccept);
+        toast.error("Impossible d'accepter la demande.");
+        return;
+      }
+
+      // Send email notification to old doctor if patient is switching
+      const ancienMedecinId = patientRow.medecin_id;
       if (ancienMedecinId) {
         const { data: ancienMed } = await supabase
           .from("utilisateurs")
@@ -226,61 +236,47 @@ const DoctorPatients = () => {
           .eq("id", ancienMedecinId)
           .single();
         if (ancienMed) {
-          ancienMedecinEmail = ancienMed.email;
-          ancienMedecinNom = `${ancienMed.prenom || ""} ${ancienMed.nom || ""}`.trim();
-        }
-      }
-
-      // 3. Récupérer les infos du patient pour l'email
-      const patientNom = [
-        patientRow.utilisateurs?.prenom,
-        patientRow.utilisateurs?.nom,
-      ].filter(Boolean).join(" ") || "—";
-
-      // 4. Assigner le nouveau médecin au patient
-      const { error: errPatient } = await supabase
-        .from("patients")
-        .update({ medecin_id: user.id, updated_at: new Date().toISOString() })
-        .eq("id", patientRow.id);
-
-      if (errPatient) {
-        toast.error("Demande acceptée mais le lien médecin n'a pas été enregistré.");
-        return;
-      }
-
-      // 5. Notifier l'ancien médecin par email (si il y en avait un)
-      if (ancienMedecinId && ancienMedecinEmail) {
-        try {
-          const { data: { session } } = await supabase.auth.getSession();
-          await fetch(
-            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-doctor-detached`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session?.access_token}`,
-              },
-              body: JSON.stringify({
-                ancienMedecinEmail,
-                ancienMedecinNom,
-                patientNom,
-              }),
-            }
-          );
-        } catch (e) {
-          // Ne pas bloquer le flux si l'email échoue
-          console.error("Erreur envoi email détachement :", e);
+          try {
+            const { data: { session } } = await supabase.auth.getSession();
+            await fetch(
+              `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-doctor-detached`,
+              {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: `Bearer ${session?.access_token}`,
+                },
+                body: JSON.stringify({
+                  ancienMedecinEmail: ancienMed.email,
+                  ancienMedecinNom: `${ancienMed.prenom || ""} ${ancienMed.nom || ""}`.trim(),
+                  patientNom: [patientRow.utilisateurs?.prenom, patientRow.utilisateurs?.nom]
+                    .filter(Boolean)
+                    .join(" ") || "—",
+                }),
+              }
+            );
+          } catch (e) {
+            console.error("Erreur envoi email détachement :", e);
+          }
         }
       }
 
       toast.success("Patient ajouté à votre liste.");
       await loadPatients();
     } else {
-      // Refus : rien ne change pour le patient, on informe juste le médecin
+      const { error: errDemande } = await supabase
+        .from("demandes")
+        .update({ statut: "refusee", updated_at: new Date().toISOString() })
+        .eq("id", demandeId);
+
+      if (errDemande) {
+        toast.error("Impossible de refuser la demande.");
+        return;
+      }
+
       toast.success("Demande refusée. Le patient conserve son médecin actuel.");
     }
 
-    // Retirer la demande de la liste locale
     setDemandes((prev) => prev.filter((d) => d.id !== demandeId));
   };
 
@@ -301,7 +297,6 @@ const DoctorPatients = () => {
           </p>
         </motion.div>
 
-        {/* Section tabs */}
         <div className="flex gap-1 bg-muted/50 p-1 rounded-xl w-fit">
           <button
             onClick={() => setSection("patients")}
@@ -377,12 +372,12 @@ const DoctorPatients = () => {
                     {filtered.map((p) => {
                       const initials = `${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?";
                       return (
-                        <motion.button
+                        <motion.div
                           key={p.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           onClick={() => setSelectedPatient(p)}
-                          className={`w-full bg-card border rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:shadow-md ${
+                          className={`w-full bg-card border rounded-2xl p-4 flex items-center gap-4 text-left transition-all hover:shadow-md cursor-pointer ${
                             selectedPatient?.id === p.id ? "border-primary ring-1 ring-primary/20" : "border-border"
                           }`}
                         >
@@ -398,17 +393,25 @@ const DoctorPatients = () => {
                             </p>
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
-                            <button type="button" onClick={(e) => handleStartConversation(p.id, e)}
-                              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors" title="Envoyer un message">
+                            <button
+                              type="button"
+                              onClick={(e) => handleStartConversation(p.id, e)}
+                              className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors"
+                              title="Envoyer un message"
+                            >
                               <MessageCircle className="w-4 h-4" />
                             </button>
-                            <button type="button" onClick={(e) => { e.stopPropagation(); navigate(`/doctor/patients/${p.id}`); }}
-                              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors" title="Voir la fiche complète">
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); navigate(`/doctor/patients/${p.id}`); }}
+                              className="p-1.5 rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                              title="Voir la fiche complète"
+                            >
                               <FileText className="w-4 h-4" />
                             </button>
                             <StatusBadge status={p.status as any} size="sm" />
                           </div>
-                        </motion.button>
+                        </motion.div>
                       );
                     })}
                   </div>
@@ -433,12 +436,18 @@ const DoctorPatients = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <button type="button" onClick={() => navigate(`/doctor/patients/${selectedPatient.id}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => navigate(`/doctor/patients/${selectedPatient.id}`)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                        >
                           <FileText className="w-4 h-4" /> Fiche complète
                         </button>
-                        <button type="button" onClick={() => handleStartConversation(selectedPatient.id)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors">
+                        <button
+                          type="button"
+                          onClick={() => handleStartConversation(selectedPatient.id)}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-sm font-medium text-primary hover:bg-primary/10 transition-colors"
+                        >
                           <MessageCircle className="w-4 h-4" /> Envoyer un message
                         </button>
                         <StatusBadge status={selectedPatient.status as any} size="md" />
@@ -529,18 +538,21 @@ const DoctorPatients = () => {
                       ? Math.floor((Date.now() - new Date(d.patients.date_naissance).getTime()) / (1000 * 60 * 60 * 24 * 365.25))
                       : null;
                     const maladies = d.patients?.maladies ?? [];
-                    const isChangement = !!d.patients?.medecin_id; // a déjà un médecin
+                    const isChangement = !!d.patients?.medecin_id;
 
                     return (
-                      <motion.div key={d.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                        className="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-start gap-4">
+                      <motion.div
+                        key={d.id}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="bg-card border border-border rounded-2xl p-4 flex flex-wrap items-start gap-4"
+                      >
                         <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold flex-shrink-0 text-sm">
-                          {fullName !== "—" ? fullName.charAt(0) : "?"}
+                          {fullName !== "—" ? fullName.charAt(0).toUpperCase() : "?"}
                         </div>
                         <div className="flex-1 min-w-0 space-y-1.5">
                           <div className="flex items-center gap-2 flex-wrap">
                             <p className="text-sm font-semibold text-foreground">{fullName}</p>
-                            {/* Badge indiquant s'il s'agit d'un changement ou d'une première assignation */}
                             {isChangement ? (
                               <span className="text-xs bg-yellow-500/10 text-yellow-600 px-2 py-0.5 rounded-full border border-yellow-500/20">
                                 Changement de médecin

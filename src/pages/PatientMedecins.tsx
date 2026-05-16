@@ -34,7 +34,6 @@ const PatientMedecins = () => {
   const [search, setSearch]               = useState("");
   const [sending, setSending]             = useState<string | null>(null);
 
-  // Confirmation dialog state
   const [confirmTarget, setConfirmTarget] = useState<Medecin | null>(null);
 
   useEffect(() => {
@@ -47,7 +46,6 @@ const PatientMedecins = () => {
       if (!patient) { setLoading(false); return; }
       setPatientId(patient.id);
 
-      // Médecin actuel
       if (patient.medecin_id) {
         const { data: med } = await supabase
           .from("utilisateurs").select("id, nom, prenom, email, telephone")
@@ -57,7 +55,6 @@ const PatientMedecins = () => {
         if (med) setMedecinActuel({ ...med, specialite: medInfo?.specialite || "—" });
       }
 
-      // Tous les médecins
       const { data: allMeds } = await supabase
         .from("utilisateurs").select("id, nom, prenom, email, telephone").eq("role", "medecin");
       if (allMeds) {
@@ -69,7 +66,6 @@ const PatientMedecins = () => {
         })));
       }
 
-      // Demandes — on ne prend que la plus récente non-refusée
       const { data: demandesData } = await supabase
         .from("demandes").select("id, medecin_id, statut, created_at")
         .eq("patient_id", patient.id)
@@ -77,7 +73,6 @@ const PatientMedecins = () => {
         .order("created_at", { ascending: false });
       if (demandesData) setDemandes(demandesData);
 
-      // Consultations
       const { data: consultData } = await supabase
         .from("consultations")
         .select("id, zoom_link, scheduled_at, status, notes")
@@ -90,19 +85,16 @@ const PatientMedecins = () => {
     init();
   }, []);
 
-  // Vérifie si une demande en_attente existe déjà (peu importe le médecin)
   const hasPendingRequest = demandes.some(d => d.statut === "en_attente");
 
   const envoyerDemande = async (medecin: Medecin) => {
     if (!patientId) return;
 
-    // Bloquer si demande déjà en attente
     if (hasPendingRequest) {
       toast.error("Vous avez déjà une demande en attente. Attendez sa réponse avant d'en envoyer une autre.");
       return;
     }
 
-    // Si le patient a déjà un médecin → demander confirmation
     if (medecinActuel && medecinActuel.id !== medecin.id) {
       setConfirmTarget(medecin);
       return;
@@ -165,7 +157,7 @@ const PatientMedecins = () => {
           <p className="text-muted-foreground text-sm mt-1">Gérez votre suivi médical</p>
         </motion.div>
 
-        {/* ── Confirmation dialog ── */}
+        {/* Confirmation dialog */}
         {confirmTarget && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
             <motion.div
@@ -241,7 +233,6 @@ const PatientMedecins = () => {
                   </div>
                 </div>
 
-                {/* Demande de changement en cours */}
                 {hasPendingRequest && (
                   <div className="mt-4 flex items-center gap-2 text-xs text-yellow-600 bg-yellow-500/10 rounded-xl px-3 py-2">
                     <Clock className="w-3.5 h-3.5 flex-shrink-0" />
@@ -327,8 +318,6 @@ const PatientMedecins = () => {
                         </span>
                       );
                     }
-                    // Pas de demande active → afficher bouton
-                    // Désactivé si une demande est déjà en attente chez un autre médecin
                     return (
                       <button
                         onClick={() => envoyerDemande(m)}
