@@ -40,10 +40,11 @@ const navItems: Record<Role, NavItem[]> = {
     { icon: Settings,      label: "Paramètres",         path: "/doctor/settings" },
   ],
   family: [
-    { icon: Heart,         label: "Mes Proches",  path: "/family" },
-    { icon: MessageSquare, label: "Messagerie",    path: "/family/messages" },
-    { icon: Bell,          label: "Alertes",       path: "/family/alerts" },
-    { icon: Settings,      label: "Paramètres",    path: "/family/parametres" },
+  { icon: Home,          label: "Vue d'ensemble", path: "/family" },
+  { icon: Users,         label: "Mes Proches",    path: "/family/proches" },
+  { icon: MessageSquare, label: "Messagerie",      path: "/family/messages" },
+  { icon: Bell,          label: "Alertes",         path: "/family/alerts" },
+  { icon: Settings,      label: "Paramètres",      path: "/family/parametres" },
   ],
   admin: [
     { icon: Home,     label: "Vue système",    path: "/admin" },
