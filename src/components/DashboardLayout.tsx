@@ -319,30 +319,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
             )}
           </div>
 
-          {/* RIGHT: Action Buttons — NO patient buttons here */}
-          <div className="flex items-center gap-2">
-            {/* Teleconsultation Quick Action — Doctor only */}
-            {role === "doctor" && (
-              <button 
-                onClick={() => navigate("/doctor/teleconsultation")}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
-              >
-                <Video className="w-3.5 h-3.5" />
-                <span>Téléconsultation</span>
-              </button>
-            )}
-
-            {/* Quick Appointment — Family only */}
-            {role === "family" && (
-              <button 
-                onClick={() => navigate("/family/appointments")}
-                className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground transition-colors"
-              >
-                <CalendarCheck className="w-3.5 h-3.5" />
-                <span>Rendez-vous</span>
-              </button>
-            )}
-          </div>
+          <div />
         </header>
         <main className="flex-1 overflow-y-auto p-4 lg:p-6">
           {children}
