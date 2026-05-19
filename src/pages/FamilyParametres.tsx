@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Settings, Loader, Save, User, Bell, Shield, Users, Trash2 } from "lucide-react";
+import { Settings, Loader, Save, User, Shield, Users, Trash2 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -30,13 +30,7 @@ const FamilyParametres = () => {
   const [userId, setUserId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<"profil" | "notifications" | "proches" | "securite">("profil");
-
-  // Notifications (UI only)
-  const [notifCritiques, setNotifCritiques] = useState(true);
-  const [notifSurveillance, setNotifSurveillance] = useState(true);
-  const [notifQuotidien, setNotifQuotidien] = useState(false);
-  const [notifChute, setNotifChute] = useState(true);
+  const [activeTab, setActiveTab] = useState<"profil" | "proches" | "securite">("profil");
 
   // Mes Proches
   const [proches, setProches] = useState<LinkedProche[]>([]);
@@ -76,7 +70,7 @@ const FamilyParametres = () => {
         const { data: patientRows } = await supabase
           .from("patients")
           .select("id, user_id")
-          .in("id", links.map((l) => l.patient_id));
+          .in("user_id", links.map((l) => l.patient_id));
 
         const userIds = (patientRows || []).map((p) => p.user_id);
         const { data: utilisateurs } = await supabase
@@ -85,7 +79,7 @@ const FamilyParametres = () => {
           .in("id", userIds);
 
         const list: LinkedProche[] = links.map((l) => {
-          const pr = (patientRows || []).find((p) => p.id === l.patient_id);
+          const pr = (patientRows || []).find((p) => p.user_id === l.patient_id);
           const u = (utilisateurs || []).find((x) => x.id === pr?.user_id);
           const name = u ? [u.prenom, u.nom].filter(Boolean).join(" ").trim() || "Proche" : "Proche";
           return {
@@ -166,10 +160,9 @@ const FamilyParametres = () => {
   };
 
   const tabs = [
-    { id: "profil", label: "Profil", icon: User },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "proches", label: "Mes Proches", icon: Users },
-    { id: "securite", label: "Sécurité", icon: Shield },
+    { id: "profil",   label: "Profil",      icon: User   },
+    { id: "proches",  label: "Mes Proches", icon: Users  },
+    { id: "securite", label: "Sécurité",    icon: Shield },
   ] as const;
 
   return (
@@ -264,62 +257,7 @@ const FamilyParametres = () => {
               </>
             )}
 
-            {/* Tab 2 — Notifications */}
-            {activeTab === "notifications" && (
-              <>
-                <h3 className="text-sm font-semibold text-card-foreground">Préférences de notifications</h3>
-                <div className="space-y-4">
-                  {[
-                    {
-                      label: "Alertes critiques",
-                      desc: "Recevoir une notification immédiate en cas d'alerte critique",
-                      value: notifCritiques,
-                      set: setNotifCritiques,
-                    },
-                    {
-                      label: "Alertes de surveillance",
-                      desc: "Recevoir les alertes de niveau surveillance",
-                      value: notifSurveillance,
-                      set: setNotifSurveillance,
-                    },
-                    {
-                      label: "Mises à jour quotidiennes",
-                      desc: "Résumé journalier de l'état de vos proches",
-                      value: notifQuotidien,
-                      set: setNotifQuotidien,
-                    },
-                    {
-                      label: "Notifications de chute",
-                      desc: "Alerte immédiate en cas de chute détectée",
-                      value: notifChute,
-                      set: setNotifChute,
-                    },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center justify-between p-4 bg-muted/50 rounded-xl">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{item.label}</p>
-                        <p className="text-xs text-muted-foreground">{item.desc}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => item.set(!item.value)}
-                        className={`w-12 h-6 rounded-full transition-all relative ${
-                          item.value ? "bg-primary" : "bg-muted-foreground/30"
-                        }`}
-                      >
-                        <span
-                          className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all shadow ${
-                            item.value ? "left-7" : "left-1"
-                          }`}
-                        />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {/* Tab 3 — Mes Proches */}
+            {/* Tab 2 — Mes Proches */}
             {activeTab === "proches" && (
               <>
                 <h3 className="text-sm font-semibold text-card-foreground">Mes Proches</h3>
@@ -417,7 +355,7 @@ const FamilyParametres = () => {
               </>
             )}
 
-            {/* Tab 4 — Sécurité */}
+            {/* Tab 3 — Sécurité */}
             {activeTab === "securite" && (
               <>
                 <h3 className="text-sm font-semibold text-card-foreground">Sécurité du compte</h3>

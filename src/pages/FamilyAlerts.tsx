@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef } from "react";
 import { motion } from "framer-motion";
-import { Bell, AlertCircle, Info, Loader, CheckCircle } from "lucide-react";
+import { Bell, AlertCircle, Info, CheckCircle } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -28,76 +28,73 @@ function timeAgo(dateStr: string) {
 
 const BORDER_BY_SEVERITY: Record<string, string> = {
   CRITIQUE: "border-l-critical",
-  MOYEN: "border-l-warning",
-  FAIBLE: "border-l-primary",
+  MOYEN:    "border-l-warning",
+  FAIBLE:   "border-l-primary",
 };
 const ICON_BY_SEVERITY: Record<string, "critical" | "warning" | "info"> = {
   CRITIQUE: "critical",
-  MOYEN: "warning",
-  FAIBLE: "info",
+  MOYEN:    "warning",
+  FAIBLE:   "info",
 };
 
 const FamilyAlerts = () => {
-  const [alertes, setAlertes] = useState<Alerte[]>([]);
-  const [patientIds, setPatientIds] = useState<string[]>([]);
+  const [alertes, setAlertes]               = useState<Alerte[]>([]);
+  const [patientTableIds, setPatientTableIds] = useState<string[]>([]); // patients.id
   const [nameByPatientId, setNameByPatientId] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterType>("toutes");
+  const [loading, setLoading]               = useState(true);
+  const [filter, setFilter]                 = useState<FilterType>("toutes");
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // 1. Get linked patients (patient_id = patients.id)
-  // 2. Get patient rows for ids + user_id
-  // 3. Get utilisateurs for names
-  // 4. Get alerts for those patient_ids
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        setLoading(false);
-        return;
-      }
+      if (!user) { setLoading(false); return; }
 
+      // Step 1 — proche_patient.patient_id = utilisateurs.id (user_id), same as FamilyDashboard
       const { data: links } = await supabase
         .from("proche_patient")
         .select("patient_id")
         .eq("proche_id", user.id);
 
-      if (!links?.length) {
-        setLoading(false);
-        return;
-      }
+      if (!links?.length) { setLoading(false); return; }
 
-      const pids = links.map((l) => l.patient_id);
-      setPatientIds(pids);
+      const patientUserIds = links.map((l) => l.patient_id); // these are user_ids
 
-      const { data: patientRows } = await supabase
-        .from("patients")
-        .select("id, user_id")
-        .in("id", pids);
-
-      if (!patientRows?.length) {
-        setLoading(false);
-        return;
-      }
-
-      const userIds = patientRows.map((p) => p.user_id);
+      // Step 2 — get utilisateurs for names
       const { data: utilisateurs } = await supabase
         .from("utilisateurs")
         .select("id, nom, prenom")
-        .in("id", userIds);
+        .in("id", patientUserIds);
 
+      // Step 3 — get patients rows (patients.id needed for alerts FK)
+      const { data: patientRows } = await supabase
+        .from("patients")
+        .select("id, user_id")
+        .in("user_id", patientUserIds); // ← corrected: join on user_id
+
+      if (!patientRows?.length) { setLoading(false); return; }
+
+      // Build name map: patients.id → display name
       const nameMap: Record<string, string> = {};
       patientRows.forEach((p) => {
         const u = (utilisateurs || []).find((x) => x.id === p.user_id);
-        nameMap[p.id] = u ? [u.prenom, u.nom].filter(Boolean).join(" ").trim() || "Proche" : "Proche";
+        nameMap[p.id] = u
+          ? [u.prenom, u.nom].filter(Boolean).join(" ").trim() || "Proche"
+          : "Proche";
       });
       setNameByPatientId(nameMap);
 
-      const { data: alertData } = await supabase
+      const pTableIds = patientRows.map((p) => p.id);
+      setPatientTableIds(pTableIds);
+
+      // Step 4 — fetch alerts using patients.id
+      const { data: alertData, error: alertError } = await supabase
         .from("alerts")
         .select("id, message, severity, type, created_at, resolved, patient_id")
-        .in("patient_id", patientRows.map((p) => p.id))
+        .in("patient_id", pTableIds)
         .order("created_at", { ascending: false });
+
+      console.log("alerts fetch:", alertData, alertError);
 
       if (alertData) {
         setAlertes(
@@ -113,9 +110,9 @@ const FamilyAlerts = () => {
     load();
   }, []);
 
-  // Realtime: new alerts for linked patients → prepend + toast
+  // Realtime: new alerts for linked patients
   useEffect(() => {
-    if (patientIds.length === 0) return;
+    if (patientTableIds.length === 0) return;
 
     const channel = supabase
       .channel("family-alerts")
@@ -123,17 +120,20 @@ const FamilyAlerts = () => {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "alerts" },
         (payload) => {
-          const row = payload.new as { id: string; patient_id: string; message?: string; severity?: string; type?: string; resolved?: boolean; created_at?: string };
-          if (!patientIds.includes(row.patient_id)) return;
+          const row = payload.new as {
+            id: string; patient_id: string; message?: string;
+            severity?: string; type?: string; resolved?: boolean; created_at?: string;
+          };
+          if (!patientTableIds.includes(row.patient_id)) return;
           const patientNom = nameByPatientId[row.patient_id] || "Un proche";
           const newAlerte: Alerte = {
-            id: row.id,
-            patient_id: row.patient_id,
-            message: row.message ?? "",
-            severity: row.severity ?? "FAIBLE",
-            type: row.type ?? "",
-            resolved: row.resolved ?? false,
-            created_at: row.created_at ?? new Date().toISOString(),
+            id:          row.id,
+            patient_id:  row.patient_id,
+            message:     row.message ?? "",
+            severity:    row.severity ?? "FAIBLE",
+            type:        row.type ?? "",
+            resolved:    row.resolved ?? false,
+            created_at:  row.created_at ?? new Date().toISOString(),
             patient_nom: patientNom,
           };
           setAlertes((prev) => [newAlerte, ...prev]);
@@ -146,26 +146,27 @@ const FamilyAlerts = () => {
     return () => {
       if (channelRef.current) supabase.removeChannel(channelRef.current);
     };
-  }, [patientIds, nameByPatientId]);
+  }, [patientTableIds, nameByPatientId]);
 
   const filtered = alertes.filter((a) => {
-    if (filter === "toutes") return true;
-    if (filter === "critiques") return (a.severity || "").toUpperCase() === "CRITIQUE";
+    if (filter === "toutes")       return true;
+    if (filter === "critiques")    return (a.severity || "").toUpperCase() === "CRITIQUE";
     if (filter === "non_resolues") return !a.resolved;
-    if (filter === "resolues") return a.resolved;
+    if (filter === "resolues")     return a.resolved;
     return true;
   });
 
   const filters: { id: FilterType; label: string }[] = [
-    { id: "toutes", label: "Toutes" },
-    { id: "critiques", label: "Critiques" },
+    { id: "toutes",       label: "Toutes"       },
+    { id: "critiques",    label: "Critiques"    },
     { id: "non_resolues", label: "Non résolues" },
-    { id: "resolues", label: "Résolues" },
+    { id: "resolues",     label: "Résolues"     },
   ];
 
   return (
     <DashboardLayout role="family">
       <div className="space-y-6 max-w-4xl">
+
         {/* Header */}
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
@@ -193,14 +194,11 @@ const FamilyAlerts = () => {
           ))}
         </div>
 
-        {/* Loading: 3 skeleton cards */}
+        {/* Loading: skeleton cards */}
         {loading && (
           <div className="space-y-3">
             {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="h-28 rounded-2xl border border-border bg-card animate-pulse"
-              />
+              <div key={i} className="h-28 rounded-2xl border border-border bg-card animate-pulse" />
             ))}
           </div>
         )}
@@ -224,9 +222,9 @@ const FamilyAlerts = () => {
         {!loading && filtered.length > 0 && (
           <div className="space-y-3">
             {filtered.map((a, i) => {
-              const sev = (a.severity || "").toUpperCase();
-              const borderClass = BORDER_BY_SEVERITY[a.severity] ?? BORDER_BY_SEVERITY[sev] ?? "border-l-primary";
-              const iconKind = ICON_BY_SEVERITY[a.severity] ?? ICON_BY_SEVERITY[sev] ?? "info";
+              const sev         = (a.severity || "").toUpperCase();
+              const borderClass = BORDER_BY_SEVERITY[sev] ?? "border-l-primary";
+              const iconKind    = ICON_BY_SEVERITY[sev]   ?? "info";
               return (
                 <motion.div
                   key={a.id}
@@ -238,11 +236,7 @@ const FamilyAlerts = () => {
                   <div className="p-4 flex items-start gap-4">
                     <div className="flex-shrink-0 mt-0.5">
                       {iconKind === "critical" || iconKind === "warning" ? (
-                        <AlertCircle
-                          className={`w-5 h-5 ${
-                            iconKind === "critical" ? "text-critical" : "text-warning"
-                          }`}
-                        />
+                        <AlertCircle className={`w-5 h-5 ${iconKind === "critical" ? "text-critical" : "text-warning"}`} />
                       ) : (
                         <Info className="w-5 h-5 text-primary" />
                       )}
@@ -274,6 +268,7 @@ const FamilyAlerts = () => {
             })}
           </div>
         )}
+
       </div>
     </DashboardLayout>
   );

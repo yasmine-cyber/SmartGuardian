@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import {
-  Phone, MapPin, MessageSquare, Heart,
+  MapPin, Heart,
   AlertCircle, Loader, UserPlus,
 } from "lucide-react";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -291,7 +291,7 @@ const FamilyDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center justify-between mb-6 bg-muted/50 rounded-2xl p-4">
+                  <div className="flex items-center justify-between bg-muted/50 rounded-2xl p-4">
                     <div>
                       {person.bpm ? (
                         <>
@@ -318,15 +318,12 @@ const FamilyDashboard = () => {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-3">
-                    <a href={person.telephone ? `tel:${person.telephone}` : undefined}
-                      className="flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3.5 rounded-2xl font-semibold text-sm hover:brightness-110 transition-all">
-                      <Phone className="w-4 h-4" /> Appeler
-                    </a>
-                    <button className="flex items-center justify-center gap-2 bg-muted text-foreground py-3.5 rounded-2xl font-semibold text-sm hover:bg-muted/80 transition-all">
+                  <div className="mt-4">
+                    <button className="w-full flex items-center justify-center gap-2 bg-muted text-foreground py-3.5 rounded-2xl font-semibold text-sm hover:bg-muted/80 transition-all">
                       <MapPin className="w-4 h-4" /> Localiser
                     </button>
                   </div>
+
                 </motion.div>
               );
             })}
@@ -377,32 +374,6 @@ const FamilyDashboard = () => {
             </div>
           </div>
         </motion.div>
-
-        {/* Quick actions */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[
-            { icon: Phone,         label: "Appeler le Médecin", desc: "Contacter l'équipe médicale", variant: "primary"   },
-            { icon: AlertCircle,   label: "Appeler le 15",      desc: "SAMU / Urgences",             variant: "critical"  },
-            { icon: MessageSquare, label: "Envoyer un Message", desc: "À l'équipe de soins",         variant: "secondary" },
-          ].map((action, i) => (
-            <motion.button key={i}
-              initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.5 + i * 0.1 }}
-              className="bg-card border border-border rounded-2xl p-5 text-left hover:shadow-md transition-all shadow-sm">
-              <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-3 ${
-                action.variant === "primary"  ? "bg-primary/10"  :
-                action.variant === "critical" ? "bg-critical/10" : "bg-muted"
-              }`}>
-                <action.icon className={`w-5 h-5 ${
-                  action.variant === "primary"  ? "text-primary"  :
-                  action.variant === "critical" ? "text-critical" : "text-muted-foreground"
-                }`} />
-              </div>
-              <p className="font-semibold text-card-foreground">{action.label}</p>
-              <p className="text-sm text-muted-foreground">{action.desc}</p>
-            </motion.button>
-          ))}
-        </div>
 
       </div>
     </DashboardLayout>
