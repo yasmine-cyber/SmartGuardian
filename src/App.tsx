@@ -16,6 +16,7 @@ import DoctorAnalytics from "./pages/DoctorAnalytics";
 import DoctorMessages from "./pages/DoctorMessages";
 import DoctorSettings from "./pages/DoctorSettings";
 import FamilyDashboard from "./pages/FamilyDashboard";
+import FamilyProches from "./pages/FamilyProches";
 import FamilyAlerts from "./pages/FamilyAlerts";
 import FamilyParametres from "./pages/FamilyParametres";
 import FamilyMessages from "./pages/FamilyMessages";
@@ -131,6 +132,7 @@ const App = () => (
 
           {/* Family */}
           <Route path="/family"            element={<ProtectedRoute allowedRoles={["proche"]}><FamilyDashboard /></ProtectedRoute>} />
+          <Route path="/family/proches" element={<FamilyProches />} />
           <Route path="/family/messages"   element={<ProtectedRoute allowedRoles={["proche"]}><FamilyMessages /></ProtectedRoute>} />
           <Route path="/family/alerts"     element={<ProtectedRoute allowedRoles={["proche"]}><FamilyAlerts /></ProtectedRoute>} />
           <Route path="/family/parametres" element={<ProtectedRoute allowedRoles={["proche"]}><FamilyParametres /></ProtectedRoute>} />
