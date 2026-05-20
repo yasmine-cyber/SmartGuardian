@@ -76,16 +76,14 @@ const PatientProches = () => {
   const generateInviteCode = async () => {
     if (!patientId || inviteCodeLoading) return;
     setInviteCodeLoading(true);
-    const code = Math.floor(100000 + Math.random() * 900000).toString();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + 24);
-    const { error } = await supabase
-      .from("patients")
-      .update({ invite_code: code, invite_code_expires_at: expiresAt.toISOString(), updated_at: new Date().toISOString() })
-      .eq("id", patientId);
-    if (!error) {
-      setInviteCode(code);
-      setInviteCodeExpiresAt(expiresAt.toISOString());
+
+    const { data, error } = await supabase.rpc("generate_invite_code", {
+      p_patient_id: patientId,
+    });
+
+    if (!error && data?.ok) {
+      setInviteCode(data.code);
+      setInviteCodeExpiresAt(data.expires_at);
       toast.success("Nouveau code généré !");
     } else {
       toast.error("Erreur lors de la génération du code.");
