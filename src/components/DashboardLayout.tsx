@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
+
 type Role = "patient" | "doctor" | "family" | "admin";
 
 interface NavItem {
@@ -75,8 +76,8 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const [userName, setUserName]     = useState<string | null>(null);
   const [photoUrl, setPhotoUrl]     = useState<string | null>(null);
   const [badges, setBadges]         = useState<Record<string, number>>({});
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [hasEmergency, setHasEmergency] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date()); 
+  const [deviceActif, setDeviceActif] = useState(false);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -88,25 +89,6 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     return () => clearInterval(timer);
   }, []);
 
-  // Check for active emergencies (real-time)
-  useEffect(() => {
-    if (role === "patient") {
-      const checkEmergency = async () => {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-        const { data } = await supabase
-          .from("emergency_calls")
-          .select("id")
-          .eq("patient_id", user.id)
-          .eq("status", "active")
-          .maybeSingle();
-        setHasEmergency(!!data);
-      };
-      checkEmergency();
-      const interval = setInterval(checkEmergency, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [role]);
 
   const handleSignOut = async () => {
     await supabase.auth.signOut();
@@ -164,6 +146,32 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
     loadBadges();
     return () => { if (channel) supabase.removeChannel(channel); };
   }, [role]);
+
+  useEffect(() => {
+        if (role !== "patient") return;
+
+        const checkDevice = async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+
+          const { data: patient } = await supabase
+            .from("patients")
+            .select("id")
+            .eq("user_id", user.id)
+            .single();
+          if (!patient) return;
+
+          const { data: device } = await supabase
+            .from("devices")
+            .select("actif")
+            .eq("patient_id", patient.id)
+            .eq("actif", true)
+            .maybeSingle();
+
+          setDeviceActif(!!device);
+        };
+        checkDevice();
+      }, [role]);
 
   const displayName    = userName || roleNames[role];
   const displayInitial = displayName?.charAt(0) || roleNames[role].charAt(0);
@@ -306,18 +314,19 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
                 <span>En consultation</span>
               </div>
             )}
-            {role === "patient" && hasEmergency && (
-              <div className="flex items-center gap-2 text-xs text-critical bg-critical/10 px-2.5 py-1 rounded-full animate-pulse">
-                <AlertTriangle className="w-3 h-3" />
-                <span>Urgence active</span>
-              </div>
-            )}
-            {role === "patient" && !hasEmergency && (
-              <div className="flex items-center gap-2 text-xs text-safe bg-safe/10 px-2.5 py-1 rounded-full">
-                <ShieldCheck className="w-3 h-3" />
-                <span>Surveillance active</span>
-              </div>
-            )}
+            {role === "patient" && (
+                  deviceActif ? (
+                    <div className="flex items-center gap-2 text-xs text-safe bg-safe/10 px-2.5 py-1 rounded-full">
+                      <ShieldCheck className="w-3 h-3" />
+                      <span>Surveillance active</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-full">
+                      <Wifi className="w-3 h-3" />
+                      <span>Capteur hors ligne</span>
+                    </div>
+                  )
+                )}
           </div>
 
           <div />

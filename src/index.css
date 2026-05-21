@@ -1,4 +1,6 @@
 @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+@import url('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -251,4 +253,65 @@
   .animate-ring-rotate { animation: ring-rotate 20s linear infinite; }
   .animate-orbit { animation: orbit 8s linear infinite; }
   .animate-orbit-outer { animation: orbit-outer 12s linear infinite; }
+
+  /* Premium animations */
+  @keyframes glow-pulse {
+    0%, 100% { text-shadow: 0 0 8px hsla(160, 20%, 46%, 0.4); }
+    50% { text-shadow: 0 0 16px hsla(160, 20%, 46%, 0.7), 0 0 24px hsla(160, 20%, 46%, 0.3); }
+  }
+
+  @keyframes gradient-shift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -1000px 0; }
+    100% { background-position: 1000px 0; }
+  }
+
+  @keyframes reveal-top {
+    0% { opacity: 0; transform: translateY(-20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes expandable-border {
+    0% { transform: scaleX(0); }
+    100% { transform: scaleX(1); }
+  }
+
+  @keyframes ripple {
+    0% { transform: scale(0); opacity: 1; }
+    100% { transform: scale(4); opacity: 0; }
+  }
+
+  @keyframes slide-in-up {
+    0% { opacity: 0; transform: translateY(24px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes slide-in-down {
+    0% { opacity: 0; transform: translateY(-24px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  @keyframes fade-in-scale {
+    0% { opacity: 0; transform: scale(0.95); }
+    100% { opacity: 1; transform: scale(1); }
+  }
+
+  @keyframes float-slow {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-12px); }
+  }
+
+  .animate-glow-pulse { animation: glow-pulse 2.5s ease-in-out infinite; }
+  .animate-gradient-shift { animation: gradient-shift 6s ease-in-out infinite; }
+  .animate-shimmer { animation: shimmer 2s linear infinite; }
+  .animate-reveal-top { animation: reveal-top 0.6s ease-out; }
+  .animate-slide-up { animation: slide-in-up 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+  .animate-slide-down { animation: slide-in-down 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+  .animate-fade-scale { animation: fade-in-scale 0.4s ease-out; }
+  .animate-float-slow { animation: float-slow 5s ease-in-out infinite; }
 }

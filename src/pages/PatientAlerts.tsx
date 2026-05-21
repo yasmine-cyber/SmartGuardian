@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell, CheckCircle, Loader, AlertTriangle,
-  ChevronDown, ChevronRight, MessageCircle, Phone,
+  ChevronDown, ChevronRight, MessageCircle,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/DashboardLayout";
@@ -13,8 +13,6 @@ import {
 } from "date-fns";
 import { fr } from "date-fns/locale";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface Alerte {
   id: string;
   severity: string;
@@ -24,44 +22,39 @@ interface Alerte {
   created_at: string;
 }
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Palette (matches landing page) ─────────────────────────────────────────
+const C = {
+  primary:     "#4a9d87",
+  primaryDark: "#3d8c7a",
+  secondary:   "#5b8fa0",
+  text:        "#1a2e28",
+  textSoft:    "rgba(30,60,50,0.62)",
+  gold:        "#d4a843",
+  muted:       "#c0504a",
+};
 
 const SEVERITY_ORDER: Record<string, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
 
 const SEVERITY_CONFIG: Record<string, {
-  label: string; emoji: string;
-  badge: string; accent: string; dot: string;
+  label: string; emoji: string; color: string; bg: string; border: string;
 }> = {
-  CRITICAL: {
-    label: "Urgente",    emoji: "🔴",
-    badge:  "bg-red-500/10 text-red-600 border-red-500/20",
-    accent: "border-l-red-500",
-    dot:    "bg-red-500",
-  },
-  HIGH: {
-    label: "Importante", emoji: "🟠",
-    badge:  "bg-orange-500/10 text-orange-600 border-orange-500/20",
-    accent: "border-l-orange-500",
-    dot:    "bg-orange-500",
-  },
-  MEDIUM: {
-    label: "Modérée",    emoji: "🟡",
-    badge:  "bg-yellow-500/10 text-yellow-600 border-yellow-500/20",
-    accent: "border-l-yellow-400",
-    dot:    "bg-yellow-400",
-  },
-  LOW: {
-    label: "Faible",     emoji: "🟢",
-    badge:  "bg-green-500/10 text-green-600 border-green-500/20",
-    accent: "border-l-green-500",
-    dot:    "bg-green-500",
-  },
+  CRITICAL: { label: "Urgente",    emoji: "🔴", color: C.muted,   bg: "rgba(192,80,74,0.10)",  border: "rgba(192,80,74,0.30)" },
+  HIGH:     { label: "Importante", emoji: "🟠", color: "#d4843a", bg: "rgba(212,132,58,0.10)", border: "rgba(212,132,58,0.30)" },
+  MEDIUM:   { label: "Modérée",    emoji: "🟡", color: C.gold,    bg: "rgba(212,168,67,0.12)", border: "rgba(212,168,67,0.30)" },
+  LOW:      { label: "Faible",     emoji: "🟢", color: C.primary, bg: "rgba(74,157,135,0.10)", border: "rgba(74,157,135,0.28)" },
 };
+
+const glass = {
+  background: "rgba(255,255,255,0.78)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(74,157,135,0.16)",
+  borderRadius: "22px",
+  boxShadow: "0 12px 36px rgba(30,60,50,0.06)",
+} as React.CSSProperties;
 
 type Timeframe      = "today" | "week" | "all";
 type SeverityFilter = "all" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const getTimeframeInterval = (tf: Timeframe): { start: Date; end: Date } => {
   const now = new Date();
@@ -70,20 +63,28 @@ const getTimeframeInterval = (tf: Timeframe): { start: Date; end: Date } => {
   return { start: new Date(0), end: now };
 };
 
-const Chip = ({ active, onClick, children }: {
-  active: boolean; onClick: () => void; children: React.ReactNode;
+const Chip = ({ active, onClick, children, color = C.primary }: {
+  active: boolean; onClick: () => void; children: React.ReactNode; color?: string;
 }) => (
   <button onClick={onClick}
-    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+    className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all"
+    style={
       active
-        ? "bg-primary text-primary-foreground border-primary"
-        : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-foreground/20"
-    }`}>
+        ? {
+            background: `linear-gradient(135deg, ${color}, ${C.secondary})`,
+            color: "#fff",
+            border: `1px solid ${color}`,
+            boxShadow: `0 6px 18px ${color}40`,
+          }
+        : {
+            background: "rgba(255,255,255,0.65)",
+            color: C.textSoft,
+            border: "1px solid rgba(74,157,135,0.18)",
+          }
+    }>
     {children}
   </button>
 );
-
-// ─── Main ─────────────────────────────────────────────────────────────────────
 
 const PatientAlerts = () => {
   const navigate = useNavigate();
@@ -96,8 +97,6 @@ const PatientAlerts = () => {
   const [timeframe, setTimeframe]           = useState<Timeframe>("all");
   const [severityFilter, setSeverityFilter] = useState<SeverityFilter>("all");
   const [collapsedDays, setCollapsedDays]   = useState<Set<string>>(new Set());
-
-  // ── Fetch ──────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     const init = async () => {
@@ -128,7 +127,6 @@ const PatientAlerts = () => {
     init();
   }, []);
 
-  // Realtime
   useEffect(() => {
     if (!patientId) return;
     const channel = supabase
@@ -142,8 +140,6 @@ const PatientAlerts = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [patientId]);
-
-  // ── Contact doctor ─────────────────────────────────────────────────────────
 
   const handleContactMedecin = async () => {
     if (!patientId || !medecinId) return;
@@ -161,8 +157,6 @@ const PatientAlerts = () => {
     }
     if (convId) navigate(`/patient/messages?conversation=${convId}`);
   };
-
-  // ── Derived ────────────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => {
     const interval = getTimeframeInterval(timeframe);
@@ -187,7 +181,6 @@ const PatientAlerts = () => {
     return Array.from(map.entries()).sort((a, b) => b[0].localeCompare(a[0]));
   }, [filtered]);
 
-  // Banner: critical alerts in last 24h
   const recentCriticals = useMemo(() =>
     alertes.filter(a =>
       a.severity === "CRITICAL" &&
@@ -197,210 +190,258 @@ const PatientAlerts = () => {
   const toggleDay = (key: string) =>
     setCollapsedDays(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
-  // ── Render ─────────────────────────────────────────────────────────────────
-
   return (
     <DashboardLayout role="patient">
-      <div className="space-y-5">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        .sg-page * { font-family: 'DM Sans', sans-serif; }
+        .sg-page h1, .sg-page h2, .sg-page h3, .sg-sora { font-family: 'Sora', sans-serif !important; }
+        .sg-gradient-text {
+          background: linear-gradient(120deg, #3d8c7a 0%, #4a9d87 55%, #5b8fa0 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes sgAurora { 0%,100%{transform:translate(0,0) scale(1);opacity:.55} 50%{transform:translate(30px,-20px) scale(1.06);opacity:.85} }
+        .sg-aurora-a { position:absolute; width:420px; height:420px; border-radius:50%; filter:blur(80px); pointer-events:none; }
+        .sg-day-card { transition: transform .3s cubic-bezier(.22,1,.36,1), box-shadow .3s; }
+        .sg-day-card:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(30,60,50,0.08); }
+      `}</style>
 
-        {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}>
-          <div className="flex items-start justify-between flex-wrap gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2.5">
-                <Bell className="w-6 h-6 text-primary" /> Mes Alertes
-              </h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                {alertes.length === 0
-                  ? "Aucune alerte enregistrée"
-                  : `${alertes.length} alerte${alertes.length > 1 ? "s" : ""} au total`}
-              </p>
-            </div>
-          </div>
-        </motion.div>
+      <div className="sg-page relative">
+        <div className="sg-aurora-a" style={{ background: "rgba(192,80,74,0.12)", top: -100, right: -80, animation: "sgAurora 22s ease-in-out infinite" }} />
+        <div className="sg-aurora-a" style={{ background: "rgba(74,157,135,0.14)", top: 280, left: -120, animation: "sgAurora 18s ease-in-out infinite reverse" }} />
 
-        {/* ── Critical banner ── */}
-        <AnimatePresence>
-          {recentCriticals.length > 0 && (
-            <motion.div
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -8 }}
-              className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4 flex items-start gap-4"
-            >
-              <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-5 h-5 text-red-500" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-red-600">
-                  {recentCriticals.length} alerte{recentCriticals.length > 1 ? "s" : ""} urgente{recentCriticals.length > 1 ? "s" : ""} dans les dernières 24h
-                </p>
-                <p className="text-xs text-red-500/80 mt-0.5">
-                  Consultez votre médecin dès que possible.
-                </p>
-              </div>
-              {medecinId && (
-                <button
-                  onClick={handleContactMedecin}
-                  className="shrink-0 flex items-center gap-1.5 px-3 py-2 bg-red-500 text-white rounded-xl text-xs font-medium hover:bg-red-600 transition-all"
-                >
-                  <MessageCircle className="w-3.5 h-3.5" /> Contacter
-                </button>
-              )}
-            </motion.div>
-          )}
-        </AnimatePresence>
+        <div className="relative space-y-5">
 
-        {/* ── Filters ── */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-          <div className="bg-card border border-border rounded-2xl p-4 space-y-3">
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">Période</p>
-              <div className="flex flex-wrap gap-1.5">
-                <Chip active={timeframe === "today"} onClick={() => setTimeframe("today")}>Aujourd'hui</Chip>
-                <Chip active={timeframe === "week"}  onClick={() => setTimeframe("week")}>Cette semaine</Chip>
-                <Chip active={timeframe === "all"}   onClick={() => setTimeframe("all")}>Tout voir</Chip>
+          {/* ── Header ── */}
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+            className="p-6 rounded-3xl" style={glass}>
+            <div className="flex items-start justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center"
+                  style={{
+                    background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                    boxShadow: "0 8px 24px rgba(74,157,135,0.30)",
+                  }}>
+                  <Bell className="w-5 h-5 text-white" />
+                </div>
+                <div>
+                  <h1 className="text-3xl font-bold tracking-tight sg-sora" style={{ color: C.text }}>
+                    Mes <span className="sg-gradient-text">Alertes</span>
+                  </h1>
+                  <p className="text-sm mt-1" style={{ color: C.textSoft }}>
+                    {alertes.length === 0
+                      ? "Aucune alerte enregistrée"
+                      : `${alertes.length} alerte${alertes.length > 1 ? "s" : ""} au total`}
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="h-px bg-border" />
-            <div>
-              <p className="text-xs text-muted-foreground mb-2">Sévérité</p>
-              <div className="flex flex-wrap gap-1.5">
-                <Chip active={severityFilter === "all"}      onClick={() => setSeverityFilter("all")}>Toutes</Chip>
-                <Chip active={severityFilter === "CRITICAL"} onClick={() => setSeverityFilter("CRITICAL")}>🔴 Urgentes</Chip>
-                <Chip active={severityFilter === "HIGH"}     onClick={() => setSeverityFilter("HIGH")}>🟠 Importantes</Chip>
-                <Chip active={severityFilter === "MEDIUM"}   onClick={() => setSeverityFilter("MEDIUM")}>🟡 Modérées</Chip>
-                <Chip active={severityFilter === "LOW"}      onClick={() => setSeverityFilter("LOW")}>🟢 Faibles</Chip>
-              </div>
-            </div>
-            {filtered.length !== alertes.length && (
-              <>
-                <div className="h-px bg-border" />
-                <p className="text-xs text-muted-foreground">
-                  <span className="text-foreground font-medium">{filtered.length}</span> alerte{filtered.length !== 1 ? "s" : ""} affichée{filtered.length !== 1 ? "s" : ""} sur {alertes.length}
-                </p>
-              </>
-            )}
-          </div>
-        </motion.div>
-
-        {/* ── Timeline ── */}
-        {loading ? (
-          <div className="flex items-center justify-center py-24">
-            <Loader className="w-6 h-6 text-primary animate-spin" />
-          </div>
-        ) : filtered.length === 0 ? (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-            className="flex flex-col items-center justify-center py-24 bg-card border border-border rounded-2xl gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-green-500/10 flex items-center justify-center">
-              <CheckCircle className="w-7 h-7 text-green-500" />
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-semibold text-foreground">Tout va bien !</p>
-              <p className="text-xs text-muted-foreground mt-1">Aucune alerte pour cette période</p>
             </div>
           </motion.div>
-        ) : (
-          <div className="space-y-3">
-            {groupedByDay.map(([dayKey, dayAlertes], gi) => {
-              const isCollapsed  = collapsedDays.has(dayKey);
-              const dayDate      = parseISO(dayKey + "T00:00:00");
-              const isToday      = dayKey === format(new Date(), "yyyy-MM-dd");
-              const isYesterday  = dayKey === format(new Date(Date.now() - 86400000), "yyyy-MM-dd");
-              const hasUrgent    = dayAlertes.some(a => a.severity === "CRITICAL");
-              const urgentCount  = dayAlertes.filter(a => a.severity === "CRITICAL").length;
 
-              const dayLabel = isToday ? "Aujourd'hui"
-                : isYesterday ? "Hier"
-                : format(dayDate, "EEEE d MMMM yyyy", { locale: fr });
-
-              return (
-                <motion.div key={dayKey}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: Math.min(gi * 0.04, 0.3) }}
-                  className="bg-card border border-border rounded-2xl overflow-hidden">
-
-                  {/* Day header */}
+          {/* ── Critical banner ── */}
+          <AnimatePresence>
+            {recentCriticals.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: -8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                className="rounded-2xl p-5 flex items-start gap-4 relative overflow-hidden"
+                style={{
+                  background: "linear-gradient(135deg, rgba(192,80,74,0.10) 0%, rgba(212,132,58,0.06) 100%)",
+                  border: "1px solid rgba(192,80,74,0.30)",
+                  boxShadow: "0 12px 32px rgba(192,80,74,0.15)",
+                }}>
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                  style={{ background: "rgba(192,80,74,0.18)" }}>
+                  <AlertTriangle className="w-5 h-5" style={{ color: C.muted }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-base font-semibold sg-sora" style={{ color: C.muted }}>
+                    {recentCriticals.length} alerte{recentCriticals.length > 1 ? "s" : ""} urgente{recentCriticals.length > 1 ? "s" : ""} dans les dernières 24h
+                  </p>
+                  <p className="text-sm mt-1" style={{ color: "rgba(192,80,74,0.85)" }}>
+                    Consultez votre médecin dès que possible.
+                  </p>
+                </div>
+                {medecinId && (
                   <button
-                    onClick={() => toggleDay(dayKey)}
-                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-muted/30 transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-3 flex-wrap">
-                      {hasUrgent && <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" />}
-                      <span className="text-sm font-semibold text-foreground capitalize">{dayLabel}</span>
-                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
-                        {dayAlertes.length} alerte{dayAlertes.length > 1 ? "s" : ""}
-                      </span>
-                      {hasUrgent && (
-                        <span className="text-xs font-medium text-red-600 bg-red-500/10 border border-red-500/20 px-2 py-0.5 rounded-full">
-                          {urgentCount} urgente{urgentCount > 1 ? "s" : ""}
-                        </span>
-                      )}
-                    </div>
-                    {isCollapsed
-                      ? <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
-                      : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />}
+                    onClick={handleContactMedecin}
+                    className="shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-full text-xs font-semibold transition-all hover:scale-105"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.muted}, #d4843a)`,
+                      color: "#fff",
+                      boxShadow: "0 6px 22px rgba(192,80,74,0.35)",
+                    }}>
+                    <MessageCircle className="w-3.5 h-3.5" /> Contacter
                   </button>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-                  {/* Alert rows */}
-                  <AnimatePresence>
-                    {!isCollapsed && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.18 }}
-                        className="border-t border-border divide-y divide-border/60 overflow-hidden"
-                      >
-                        {dayAlertes.map((a) => {
-                          const cfg  = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.LOW;
-                          const time = format(parseISO(a.created_at), "HH:mm");
-                          const ago  = formatDistanceToNow(parseISO(a.created_at), { addSuffix: true, locale: fr });
+          {/* ── Filters ── */}
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <div className="p-5 space-y-4" style={glass}>
+              <div>
+                <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: C.textSoft }}>Période</p>
+                <div className="flex flex-wrap gap-2">
+                  <Chip active={timeframe === "today"} onClick={() => setTimeframe("today")}>Aujourd'hui</Chip>
+                  <Chip active={timeframe === "week"}  onClick={() => setTimeframe("week")}>Cette semaine</Chip>
+                  <Chip active={timeframe === "all"}   onClick={() => setTimeframe("all")}>Tout voir</Chip>
+                </div>
+              </div>
+              <div className="h-px" style={{ background: "rgba(74,157,135,0.15)" }} />
+              <div>
+                <p className="text-xs font-semibold mb-2.5 uppercase tracking-wider" style={{ color: C.textSoft }}>Sévérité</p>
+                <div className="flex flex-wrap gap-2">
+                  <Chip active={severityFilter === "all"}      onClick={() => setSeverityFilter("all")}>Toutes</Chip>
+                  <Chip active={severityFilter === "CRITICAL"} onClick={() => setSeverityFilter("CRITICAL")} color={C.muted}>🔴 Urgentes</Chip>
+                  <Chip active={severityFilter === "HIGH"}     onClick={() => setSeverityFilter("HIGH")} color="#d4843a">🟠 Importantes</Chip>
+                  <Chip active={severityFilter === "MEDIUM"}   onClick={() => setSeverityFilter("MEDIUM")} color={C.gold}>🟡 Modérées</Chip>
+                  <Chip active={severityFilter === "LOW"}      onClick={() => setSeverityFilter("LOW")} color={C.primary}>🟢 Faibles</Chip>
+                </div>
+              </div>
+              {filtered.length !== alertes.length && (
+                <>
+                  <div className="h-px" style={{ background: "rgba(74,157,135,0.15)" }} />
+                  <p className="text-xs" style={{ color: C.textSoft }}>
+                    <span className="font-semibold sg-gradient-text">{filtered.length}</span> alerte{filtered.length !== 1 ? "s" : ""} affichée{filtered.length !== 1 ? "s" : ""} sur {alertes.length}
+                  </p>
+                </>
+              )}
+            </div>
+          </motion.div>
 
-                          return (
-                            <div key={a.id}
-                              className={`flex items-start gap-4 px-5 py-4 hover:bg-muted/20 transition-colors border-l-2 ${cfg.accent}`}>
+          {/* ── Timeline ── */}
+          {loading ? (
+            <div className="flex items-center justify-center py-24">
+              <Loader className="w-6 h-6 animate-spin" style={{ color: C.primary }} />
+            </div>
+          ) : filtered.length === 0 ? (
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="flex flex-col items-center justify-center py-24 gap-3" style={glass}>
+              <div className="w-16 h-16 rounded-3xl flex items-center justify-center"
+                style={{
+                  background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                  boxShadow: "0 12px 28px rgba(74,157,135,0.30)",
+                }}>
+                <CheckCircle className="w-8 h-8 text-white" />
+              </div>
+              <div className="text-center">
+                <p className="text-base font-semibold sg-sora" style={{ color: C.text }}>Tout va bien !</p>
+                <p className="text-sm mt-1" style={{ color: C.textSoft }}>Aucune alerte pour cette période</p>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="space-y-3">
+              {groupedByDay.map(([dayKey, dayAlertes], gi) => {
+                const isCollapsed  = collapsedDays.has(dayKey);
+                const dayDate      = parseISO(dayKey + "T00:00:00");
+                const isToday      = dayKey === format(new Date(), "yyyy-MM-dd");
+                const isYesterday  = dayKey === format(new Date(Date.now() - 86400000), "yyyy-MM-dd");
+                const hasUrgent    = dayAlertes.some(a => a.severity === "CRITICAL");
+                const urgentCount  = dayAlertes.filter(a => a.severity === "CRITICAL").length;
 
-                              <div className="flex-1 min-w-0">
-                                {/* Badge */}
-                                <div className="flex items-center gap-2 flex-wrap mb-1.5">
-                                  <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${cfg.badge}`}>
-                                    {cfg.emoji} {cfg.label}
-                                  </span>
+                const dayLabel = isToday ? "Aujourd'hui"
+                  : isYesterday ? "Hier"
+                  : format(dayDate, "EEEE d MMMM yyyy", { locale: fr });
+
+                return (
+                  <motion.div key={dayKey}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: Math.min(gi * 0.04, 0.3) }}
+                    className="sg-day-card overflow-hidden"
+                    style={glass}>
+
+                    <button
+                      onClick={() => toggleDay(dayKey)}
+                      className="w-full flex items-center justify-between px-5 py-4 transition-colors text-left"
+                      style={{ background: hasUrgent ? "rgba(192,80,74,0.04)" : "transparent" }}
+                    >
+                      <div className="flex items-center gap-3 flex-wrap">
+                        {hasUrgent && <span className="w-2.5 h-2.5 rounded-full animate-pulse shrink-0" style={{ background: C.muted }} />}
+                        <span className="text-sm font-semibold capitalize sg-sora" style={{ color: C.text }}>{dayLabel}</span>
+                        <span className="text-xs font-medium px-2.5 py-0.5 rounded-full"
+                          style={{ background: "rgba(74,157,135,0.10)", color: C.primaryDark }}>
+                          {dayAlertes.length} alerte{dayAlertes.length > 1 ? "s" : ""}
+                        </span>
+                        {hasUrgent && (
+                          <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+                            style={{ background: "rgba(192,80,74,0.12)", color: C.muted, border: "1px solid rgba(192,80,74,0.25)" }}>
+                            {urgentCount} urgente{urgentCount > 1 ? "s" : ""}
+                          </span>
+                        )}
+                      </div>
+                      {isCollapsed
+                        ? <ChevronRight className="w-4 h-4 shrink-0" style={{ color: C.textSoft }} />
+                        : <ChevronDown className="w-4 h-4 shrink-0" style={{ color: C.textSoft }} />}
+                    </button>
+
+                    <AnimatePresence>
+                      {!isCollapsed && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: "auto" }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.18 }}
+                          className="overflow-hidden"
+                          style={{ borderTop: "1px solid rgba(74,157,135,0.12)" }}
+                        >
+                          {dayAlertes.map((a, idx) => {
+                            const cfg  = SEVERITY_CONFIG[a.severity] || SEVERITY_CONFIG.LOW;
+                            const time = format(parseISO(a.created_at), "HH:mm");
+                            const ago  = formatDistanceToNow(parseISO(a.created_at), { addSuffix: true, locale: fr });
+
+                            return (
+                              <div key={a.id}
+                                className="flex items-start gap-4 px-5 py-4 transition-colors"
+                                style={{
+                                  borderLeft: `3px solid ${cfg.color}`,
+                                  borderTop: idx === 0 ? "none" : "1px solid rgba(74,157,135,0.08)",
+                                }}>
+
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center gap-2 flex-wrap mb-2">
+                                    <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full"
+                                      style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                                      {cfg.emoji} {cfg.label}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-sm font-medium leading-snug sg-sora" style={{ color: C.text }}>{a.message}</p>
+
+                                  <div className="flex items-center gap-2 mt-2 flex-wrap">
+                                    <span className="text-[11px] font-medium" style={{ color: C.textSoft }}>{time}</span>
+                                    <span className="text-[11px]" style={{ color: "rgba(30,60,50,0.30)" }}>·</span>
+                                    <span className="text-[11px]" style={{ color: C.textSoft }}>{ago}</span>
+                                  </div>
                                 </div>
 
-                                {/* Message */}
-                                <p className="text-sm text-foreground font-medium leading-snug">{a.message}</p>
-
-                                {/* Meta */}
-                                <div className="flex items-center gap-2 mt-2 flex-wrap">
-                                  <span className="text-[11px] text-muted-foreground font-medium">{time}</span>
-                                  <span className="text-muted-foreground/40 text-[11px]">·</span>
-                                  <span className="text-[11px] text-muted-foreground">{ago}</span>
-                                </div>
+                                {a.severity === "CRITICAL" && medecinId && (
+                                  <button
+                                    onClick={handleContactMedecin}
+                                    className="shrink-0 flex items-center gap-1.5 text-xs font-semibold px-3 py-2 rounded-full transition-all hover:scale-105"
+                                    style={{
+                                      background: cfg.bg,
+                                      color: cfg.color,
+                                      border: `1px solid ${cfg.border}`,
+                                    }}>
+                                    <MessageCircle className="w-3 h-3" /> Contacter
+                                  </button>
+                                )}
                               </div>
-
-                              {/* CTA on urgent only */}
-                              {a.severity === "CRITICAL" && medecinId && (
-                                <button
-                                  onClick={handleContactMedecin}
-                                  className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-red-600 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 px-3 py-1.5 rounded-xl transition-all mt-0.5"
-                                >
-                                  <MessageCircle className="w-3 h-3" /> Contacter
-                                </button>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
-                </motion.div>
-              );
-            })}
-          </div>
-        )}
+                            );
+                          })}
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
     </DashboardLayout>
   );
