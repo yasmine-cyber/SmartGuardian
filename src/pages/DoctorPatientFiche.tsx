@@ -1290,33 +1290,6 @@ const DoctorPatientFiche = () => {
                 </Section>
               </motion.div>
 
-              {/* Anomalies IA */}
-              {anomalies.length > 0 && (
-                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                  <Section title="Anomalies détectées par IA" icon={<Zap className="w-3.5 h-3.5" />}>
-                    <div className="space-y-2">
-                      {anomalies.map(a => (
-                        <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl text-xs"
-                          style={{ background: "rgba(74,157,135,0.05)", border: "1px solid rgba(74,157,135,0.14)" }}>
-                          <div>
-                            <p className="font-semibold dp-sora" style={{ color: C.text }}>{a.type_anomalie.replace(/_/g, " ")}</p>
-                            <p className="mt-0.5" style={{ color: C.textSoft }}>{formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}</p>
-                          </div>
-                          {a.score_confiance != null && (
-                            <div className="flex items-center gap-1.5">
-                              <div className="h-1.5 w-16 rounded-full overflow-hidden" style={{ background: "rgba(74,157,135,0.12)" }}>
-                                <div className="h-full rounded-full" style={{ background: C.primary, width: `${Math.min(a.score_confiance * 40, 100)}%` }} />
-                              </div>
-                              <span style={{ color: C.textSoft }}>{a.score_confiance.toFixed(2)}</span>
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </Section>
-                </motion.div>
-              )}
-
               {/* Notes cliniques */}
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>
                 <Section title="Notes cliniques" icon={<FileText className="w-3.5 h-3.5" />}>
