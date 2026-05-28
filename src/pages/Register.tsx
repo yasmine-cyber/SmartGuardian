@@ -1,11 +1,22 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Heart, Mail, Lock, User, ArrowRight, ArrowLeft,
   Check, AlertCircle, Loader, CreditCard, Clock,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+// ─── Palette ─────────────────────────────────────────────────────────────────
+const C = {
+  primary:     "#4a9d87",
+  primaryDark: "#3d8c7a",
+  secondary:   "#5b8fa0",
+  text:        "#1a2e28",
+  textSoft:    "rgba(30,60,50,0.62)",
+  gold:        "#d4a843",
+  muted:       "#c0504a",
+};
 
 const PATIENT_STEPS = ["Compte", "Détails", "Email"];
 const PROCHE_STEPS  = ["Compte", "Détails", "Confirmé"];
@@ -44,22 +55,22 @@ interface FieldErrors {
 
 const Register = () => {
   const [searchParams] = useSearchParams();
-  const [step, setStep] = useState(0);
+  const [step, setStep]       = useState(0);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]     = useState("");
   const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
   const [registeredEmail, setRegisteredEmail] = useState("");
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [prenom, setPrenom] = useState("");
-  const [nom, setNom] = useState("");
-  const [role, setRole] = useState("patient");
-  const [telephone, setTelephone] = useState("");
+  const [email, setEmail]               = useState("");
+  const [password, setPassword]         = useState("");
+  const [prenom, setPrenom]             = useState("");
+  const [nom, setNom]                   = useState("");
+  const [role, setRole]                 = useState("patient");
+  const [telephone, setTelephone]       = useState("");
   const [dateNaissance, setDateNaissance] = useState("");
-  const [maladies, setMaladies] = useState<string[]>([]);
+  const [maladies, setMaladies]         = useState<string[]>([]);
   const [autreMaladie, setAutreMaladie] = useState("");
 
   useEffect(() => {
@@ -83,12 +94,10 @@ const Register = () => {
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(""); setFieldErrors({});
-
     const newErrors: FieldErrors = {};
     const phoneDigits = telephone.replace(/\D/g, "");
     if (!telephone.trim()) newErrors.telephone = "Le numéro de téléphone est obligatoire.";
     else if (phoneDigits.length !== 8) newErrors.telephone = "Le numéro doit contenir exactement 8 chiffres.";
-
     if (role === "patient") {
       const today = new Date(); today.setHours(23, 59, 59, 999);
       const minDate = new Date(today.getFullYear() - 120, 0, 1);
@@ -102,7 +111,6 @@ const Register = () => {
       else if (maladies.includes("Autre") && !autreMaladie.trim())
         newErrors.maladies = "Précisez la maladie pour le choix \"Autre\".";
     }
-
     if (Object.keys(newErrors).length > 0) { setFieldErrors(newErrors); return; }
 
     const maladiesToSave = role === "patient"
@@ -111,11 +119,8 @@ const Register = () => {
 
     setLoading(true);
     try {
-      // ✅ Toutes les données dans user_metadata → lues par le trigger handle_new_user
-      // Aucun insert manuel : pas de session disponible avant confirmation email
       const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
+        email, password,
         options: {
           data: {
             role,
@@ -126,23 +131,15 @@ const Register = () => {
           },
         },
       });
-
       if (signUpError) {
-        if (signUpError.code === "over_email_send_rate_limit")
-          setError("Trop de tentatives. Veuillez réessayer dans une heure.");
-        else setError(`Erreur: ${signUpError.message}`);
+        setError(signUpError.code === "over_email_send_rate_limit"
+          ? "Trop de tentatives. Veuillez réessayer dans une heure."
+          : `Erreur: ${signUpError.message}`);
         return;
       }
-
-      if (!data.user) {
-        setError("Inscription réussie, mais impossible de récupérer l'utilisateur.");
-        return;
-      }
-
-      // ✅ Le trigger handle_new_user créera utilisateurs + patients automatiquement
+      if (!data.user) { setError("Inscription réussie, mais impossible de récupérer l'utilisateur."); return; }
       setRegisteredEmail(email);
       setStep(2);
-
     } catch (err) {
       setError(err instanceof Error ? err.message : "Erreur lors de l'inscription");
     } finally {
@@ -159,291 +156,456 @@ const Register = () => {
         (!maladies.includes("Autre") || autreMaladie.trim().length > 0));
 
   return (
-    <div className="min-h-screen flex">
-      <div className="hidden lg:flex lg:w-1/2 bg-secondary aurora-bg items-center justify-center p-12 relative">
-        <div className="absolute bottom-1/4 right-1/3 w-[300px] h-[300px] rounded-full bg-primary/8 blur-[100px] animate-aurora" />
-        <div className="relative z-10 text-center">
-          <Heart className="w-16 h-16 text-primary mx-auto mb-6 animate-heartbeat" />
-          <h2 className="text-3xl font-bold text-foreground mb-3">SmartGuardian</h2>
-          <p className="text-muted-foreground text-lg max-w-sm">
-            Créez votre compte pour commencer le suivi intelligent de votre santé
-          </p>
-        </div>
-      </div>
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        .sg-reg * { font-family: 'DM Sans', sans-serif; }
+        .sg-reg h1, .sg-reg h2, .sg-reg h3, .sg-sora { font-family: 'Sora', sans-serif !important; }
+        .sg-gradient-text {
+          background: linear-gradient(120deg, #3d8c7a 0%, #4a9d87 55%, #5b8fa0 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes sgAurora { 0%,100%{transform:translate(0,0) scale(1);opacity:.6} 50%{transform:translate(40px,-30px) scale(1.08);opacity:.9} }
+        @keyframes sgHeartbeat { 0%,100%{transform:scale(1)} 14%{transform:scale(1.15)} 28%{transform:scale(1)} 42%{transform:scale(1.10)} 56%{transform:scale(1)} }
+        .sg-heartbeat { animation: sgHeartbeat 2.4s ease-in-out infinite; }
+        .sg-input {
+          width:100%; background:rgba(255,255,255,0.70); border:1px solid rgba(74,157,135,0.22);
+          border-radius:14px; padding:12px 14px 12px 40px; font-size:14px; color:#1a2e28;
+          outline:none; transition:border .2s, box-shadow .2s; font-family:'DM Sans',sans-serif;
+        }
+        .sg-input-bare {
+          width:100%; background:rgba(255,255,255,0.70); border:1px solid rgba(74,157,135,0.22);
+          border-radius:14px; padding:12px 14px; font-size:14px; color:#1a2e28;
+          outline:none; transition:border .2s, box-shadow .2s; font-family:'DM Sans',sans-serif;
+        }
+        .sg-input::placeholder, .sg-input-bare::placeholder { color:rgba(30,60,50,0.38); }
+        .sg-input:focus, .sg-input-bare:focus { border-color:rgba(74,157,135,0.55); box-shadow:0 0 0 3px rgba(74,157,135,0.12); }
+        .sg-input:disabled, .sg-input-bare:disabled { opacity:.50; cursor:not-allowed; }
+        .sg-divider { display:flex; align-items:center; gap:12px; }
+        .sg-divider::before,.sg-divider::after { content:''; flex:1; height:1px; background:rgba(74,157,135,0.18); }
+        .sg-checkbox { accent-color:#4a9d87; width:15px; height:15px; cursor:pointer; margin-top:2px; }
+        .sg-scrollbox::-webkit-scrollbar { width:4px; }
+        .sg-scrollbox::-webkit-scrollbar-track { background:transparent; }
+        .sg-scrollbox::-webkit-scrollbar-thumb { background:rgba(74,157,135,0.30); border-radius:8px; }
+      `}</style>
 
-      <div className="flex-1 flex items-center justify-center p-6 bg-background">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
+      <div className="sg-reg min-h-screen flex" style={{ background: "linear-gradient(135deg, #f0faf7 0%, #e8f4f8 100%)" }}>
 
-          <div className="lg:hidden text-center mb-8">
-            <Link to="/" className="inline-flex items-center gap-2">
-              <Heart className="w-8 h-8 text-primary animate-heartbeat" />
-              <span className="text-xl font-bold text-foreground">SmartGuardian</span>
-            </Link>
-          </div>
+        {/* ── Left panel ── */}
+        <div className="hidden lg:flex lg:w-1/2 items-center justify-center p-12 relative overflow-hidden"
+          style={{ background: "linear-gradient(160deg, rgba(74,157,135,0.12) 0%, rgba(91,143,160,0.10) 100%)" }}>
+          <div style={{ position:"absolute", width:380, height:380, borderRadius:"50%", background:"rgba(74,157,135,0.18)", filter:"blur(90px)", top:-60, right:-40, animation:"sgAurora 20s ease-in-out infinite", pointerEvents:"none" }} />
+          <div style={{ position:"absolute", width:300, height:300, borderRadius:"50%", background:"rgba(91,143,160,0.16)", filter:"blur(80px)", bottom:40, left:-40, animation:"sgAurora 16s ease-in-out infinite reverse", pointerEvents:"none" }} />
 
-          <h1 className="text-2xl font-bold text-foreground mb-1">Créer un compte</h1>
-          <p className="text-muted-foreground text-sm mb-6">Étape {step + 1} sur {steps.length}</p>
-
-          <div className="flex items-center justify-center gap-2 mb-6">
-            {steps.map((s, i) => (
-              <div key={s} className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-semibold transition-all ${
-                  i <= step ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                }`}>
-                  {i < step ? <Check className="w-4 h-4" /> : i + 1}
-                </div>
-                <span className={`text-xs hidden sm:inline ${i <= step ? "text-foreground" : "text-muted-foreground"}`}>{s}</span>
-                {i < steps.length - 1 && <div className={`w-6 h-0.5 ${i < step ? "bg-primary" : "bg-border"}`} />}
-              </div>
-            ))}
-          </div>
-
-          {step === 0 && (
-            <>
-              <button onClick={handleGoogleRegister} disabled={googleLoading}
-                className="w-full flex items-center justify-center gap-3 py-3 px-4 bg-background border border-border rounded-xl text-sm font-medium text-foreground hover:bg-muted/50 transition-all disabled:opacity-50 disabled:cursor-not-allowed mb-4">
-                {googleLoading ? <Loader className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
-                S'inscrire avec Google
-              </button>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="flex-1 h-px bg-border" />
-                <span className="text-xs text-muted-foreground">ou</span>
-                <div className="flex-1 h-px bg-border" />
-              </div>
-            </>
-          )}
-
-          {error && (
-            <div className="mb-4 p-3 bg-destructive/10 border border-destructive/50 rounded-lg flex items-start gap-2">
-              <AlertCircle className="w-4 h-4 text-destructive mt-0.5 flex-shrink-0" />
-              <p className="text-sm text-destructive">{error}</p>
+          <div className="relative z-10 text-center">
+            <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6"
+              style={{
+                background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                boxShadow: "0 16px 48px rgba(74,157,135,0.35)",
+              }}>
+              <Heart className="w-10 h-10 text-white sg-heartbeat" />
             </div>
-          )}
+            <h2 className="text-3xl font-bold sg-sora mb-3" style={{ color: C.text }}>
+              Smart<span className="sg-gradient-text">Guardian</span>
+            </h2>
+            <p className="text-base max-w-xs mx-auto" style={{ color: C.textSoft }}>
+              Créez votre compte pour commencer le suivi intelligent de votre santé
+            </p>
 
-          <div className="bg-card border border-border rounded-2xl p-8 shadow-sm">
+            {/* Feature pills */}
+            <div className="mt-10 space-y-3 text-left max-w-xs mx-auto">
+              {[
+                ["🫀", "Surveillance cardiaque en temps réel"],
+                ["🤖", "Alertes intelligentes par IA"],
+                ["👨‍⚕️", "Lien direct avec votre médecin"],
+              ].map(([icon, label]) => (
+                <div key={label} className="flex items-center gap-3 px-4 py-2.5 rounded-2xl"
+                  style={{ background: "rgba(255,255,255,0.55)", border: "1px solid rgba(74,157,135,0.18)" }}>
+                  <span className="text-lg">{icon}</span>
+                  <span className="text-sm font-medium" style={{ color: C.text }}>{label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
 
-            {/* ── STEP 0 — Compte ── */}
-            {step === 0 && (
-              <motion.form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  const newErrors: FieldErrors = {};
-                  if (!prenom.trim()) newErrors.prenom = "Le prénom est obligatoire.";
-                  if (!nom.trim()) newErrors.nom = "Le nom est obligatoire.";
-                  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-                  if (!email.trim()) newErrors.email = "L'adresse e-mail est obligatoire.";
-                  else if (!emailRegex.test(email.trim())) newErrors.email = "Adresse e-mail invalide.";
-                  if (!password.trim()) newErrors.password = "Le mot de passe est obligatoire.";
-                  else if (password.length < 6) newErrors.password = "Minimum 6 caractères.";
-                  setFieldErrors(newErrors);
-                  if (Object.keys(newErrors).length === 0) setStep(1);
-                }}
-                className="space-y-4"
-              >
-                <h3 className="text-lg font-semibold text-card-foreground mb-4">Choisissez votre rôle</h3>
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {[{ id: "patient", label: "Patient", icon: "👤" }, { id: "proche", label: "Aidant", icon: "👨‍👩‍👧" }].map((r) => (
-                    <button key={r.id} type="button" onClick={() => setRole(r.id)}
-                      className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
-                        role === r.id ? "border-primary/50 bg-primary/5 text-foreground" : "border-border text-muted-foreground hover:border-primary/20"
-                      }`}>
-                      <span className="text-2xl">{r.icon}</span>
-                      <span className="text-sm font-medium">{r.label}</span>
+        {/* ── Right panel ── */}
+        <div className="flex-1 flex items-center justify-center p-6 overflow-y-auto">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.45 }} className="w-full max-w-md py-8">
+
+            {/* Mobile logo */}
+            <div className="lg:hidden text-center mb-8">
+              <Link to="/" className="inline-flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center"
+                  style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})` }}>
+                  <Heart className="w-5 h-5 text-white sg-heartbeat" />
+                </div>
+                <span className="text-xl font-bold sg-sora" style={{ color: C.text }}>
+                  Smart<span className="sg-gradient-text">Guardian</span>
+                </span>
+              </Link>
+            </div>
+
+            {/* Title */}
+            <h1 className="text-2xl font-bold sg-sora mb-1" style={{ color: C.text }}>Créer un compte</h1>
+            <p className="text-sm mb-5" style={{ color: C.textSoft }}>Étape {step + 1} sur {steps.length}</p>
+
+            {/* Step indicators */}
+            <div className="flex items-center justify-center gap-2 mb-5">
+              {steps.map((s, i) => (
+                <div key={s} className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold sg-sora transition-all"
+                    style={i <= step ? {
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                      color: "#fff",
+                      boxShadow: "0 4px 12px rgba(74,157,135,0.30)",
+                    } : {
+                      background: "rgba(74,157,135,0.08)",
+                      color: C.textSoft,
+                      border: "1px solid rgba(74,157,135,0.18)",
+                    }}>
+                    {i < step ? <Check className="w-3.5 h-3.5" /> : i + 1}
+                  </div>
+                  <span className="text-xs hidden sm:inline sg-sora font-medium"
+                    style={{ color: i <= step ? C.primary : C.textSoft }}>{s}</span>
+                  {i < steps.length - 1 && (
+                    <div className="w-6 h-0.5 rounded-full"
+                      style={{ background: i < step ? `linear-gradient(90deg,${C.primary},${C.secondary})` : "rgba(74,157,135,0.18)" }} />
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Error banner */}
+            <AnimatePresence>
+              {error && (
+                <motion.div initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="mb-4 p-3 rounded-2xl flex items-start gap-2"
+                  style={{ background: "rgba(192,80,74,0.08)", border: "1px solid rgba(192,80,74,0.28)" }}>
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" style={{ color: C.muted }} />
+                  <p className="text-sm" style={{ color: C.muted }}>{error}</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* Card */}
+            <div style={{
+              background: "rgba(255,255,255,0.80)",
+              backdropFilter: "blur(20px)",
+              WebkitBackdropFilter: "blur(20px)",
+              border: "1px solid rgba(74,157,135,0.18)",
+              borderRadius: "28px",
+              boxShadow: "0 20px 60px rgba(30,60,50,0.08)",
+              padding: "32px",
+            }}>
+
+              {/* ── STEP 0 — Compte ── */}
+              {step === 0 && (
+                <>
+                  {/* Google */}
+                  <button onClick={handleGoogleRegister} disabled={googleLoading}
+                    className="w-full flex items-center justify-center gap-3 py-3 px-4 rounded-2xl text-sm font-semibold transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed mb-4"
+                    style={{
+                      background: "rgba(255,255,255,0.90)",
+                      border: "1px solid rgba(74,157,135,0.20)",
+                      color: C.text,
+                      boxShadow: "0 4px 14px rgba(30,60,50,0.06)",
+                    }}>
+                    {googleLoading ? <Loader className="w-4 h-4 animate-spin" style={{ color: C.primary }} /> : <GoogleIcon />}
+                    S'inscrire avec Google
+                  </button>
+                  <div className="sg-divider mb-4">
+                    <span className="text-xs" style={{ color: C.textSoft }}>ou</span>
+                  </div>
+
+                  <motion.form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      const newErrors: FieldErrors = {};
+                      if (!prenom.trim()) newErrors.prenom = "Le prénom est obligatoire.";
+                      if (!nom.trim()) newErrors.nom = "Le nom est obligatoire.";
+                      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+                      if (!email.trim()) newErrors.email = "L'adresse e-mail est obligatoire.";
+                      else if (!emailRegex.test(email.trim())) newErrors.email = "Adresse e-mail invalide.";
+                      if (!password.trim()) newErrors.password = "Le mot de passe est obligatoire.";
+                      else if (password.length < 6) newErrors.password = "Minimum 6 caractères.";
+                      setFieldErrors(newErrors);
+                      if (Object.keys(newErrors).length === 0) setStep(1);
+                    }}
+                    className="space-y-4"
+                  >
+                    {/* Role selector */}
+                    <p className="text-xs font-semibold uppercase tracking-wider mb-1" style={{ color: C.textSoft }}>Votre rôle</p>
+                    <div className="grid grid-cols-2 gap-3 mb-2">
+                      {[{ id: "patient", label: "Patient", icon: "👤" }, { id: "proche", label: "Aidant", icon: "👨‍👩‍👧" }].map((r) => (
+                        <button key={r.id} type="button" onClick={() => setRole(r.id)}
+                          className="flex items-center gap-3 p-3.5 rounded-2xl transition-all hover:scale-[1.02]"
+                          style={role === r.id ? {
+                            background: "rgba(74,157,135,0.10)",
+                            border: `1.5px solid rgba(74,157,135,0.45)`,
+                            color: C.primary,
+                            boxShadow: "0 4px 14px rgba(74,157,135,0.15)",
+                          } : {
+                            background: "rgba(74,157,135,0.03)",
+                            border: "1px solid rgba(74,157,135,0.16)",
+                            color: C.textSoft,
+                          }}>
+                          <span className="text-xl">{r.icon}</span>
+                          <span className="text-sm font-semibold sg-sora">{r.label}</span>
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Name row */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                          <input type="text" placeholder="Prénom" value={prenom}
+                            onChange={e => setPrenom(e.target.value)} className="sg-input" />
+                        </div>
+                        {fieldErrors.prenom && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.prenom}</p>}
+                      </div>
+                      <div>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                          <input type="text" placeholder="Nom" value={nom}
+                            onChange={e => setNom(e.target.value)} className="sg-input" />
+                        </div>
+                        {fieldErrors.nom && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.nom}</p>}
+                      </div>
+                    </div>
+
+                    {/* Email */}
+                    <div>
+                      <div className="relative">
+                        <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                        <input type="email" placeholder="Adresse e-mail" value={email}
+                          onChange={e => setEmail(e.target.value)} className="sg-input" />
+                      </div>
+                      {fieldErrors.email && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.email}</p>}
+                    </div>
+
+                    {/* Password */}
+                    <div>
+                      <div className="relative">
+                        <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                        <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password}
+                          onChange={e => setPassword(e.target.value)} className="sg-input" />
+                      </div>
+                      {fieldErrors.password && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.password}</p>}
+                    </div>
+
+                    <button type="submit" disabled={!canProceedStep0}
+                      className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold sg-sora transition-all hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                        color: "#fff",
+                        boxShadow: canProceedStep0 ? "0 8px 28px rgba(74,157,135,0.35)" : "none",
+                      }}>
+                      Continuer <ArrowRight className="w-4 h-4" />
                     </button>
-                  ))}
-                </div>
+                  </motion.form>
+                </>
+              )}
 
-                <div className="grid grid-cols-2 gap-3">
+              {/* ── STEP 1 — Détails ── */}
+              {step === 1 && (
+                <motion.form onSubmit={handleSignUp} className="space-y-4">
+                  <p className="text-base font-bold sg-sora mb-4" style={{ color: C.text }}>
+                    {role === "proche" ? "Informations Aidant" : "Informations Patient"}
+                  </p>
+
+                  {/* Phone */}
                   <div>
                     <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Prénom" value={prenom} onChange={(e) => setPrenom(e.target.value)}
-                        className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
+                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                      <input type="tel" placeholder="Numéro de téléphone" value={telephone}
+                        onChange={e => setTelephone(e.target.value)} className="sg-input" />
                     </div>
-                    {fieldErrors.prenom && <p className="text-xs text-destructive mt-1">{fieldErrors.prenom}</p>}
+                    {fieldErrors.telephone && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.telephone}</p>}
                   </div>
-                  <div>
-                    <div className="relative">
-                      <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                      <input type="text" placeholder="Nom" value={nom} onChange={(e) => setNom(e.target.value)}
-                        className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                    </div>
-                    {fieldErrors.nom && <p className="text-xs text-destructive mt-1">{fieldErrors.nom}</p>}
-                  </div>
-                </div>
-
-                <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="email" placeholder="Adresse e-mail" value={email} onChange={(e) => setEmail(e.target.value)}
-                    className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                </div>
-                {fieldErrors.email && <p className="text-xs text-destructive">{fieldErrors.email}</p>}
-
-                <div className="relative">
-                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                  <input type="password" placeholder="Mot de passe (min. 6 caractères)" value={password} onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                </div>
-                {fieldErrors.password && <p className="text-xs text-destructive">{fieldErrors.password}</p>}
-
-                <button type="submit" disabled={!canProceedStep0}
-                  className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage disabled:opacity-50 disabled:cursor-not-allowed">
-                  Continuer <ArrowRight className="w-4 h-4" />
-                </button>
-              </motion.form>
-            )}
-
-            {/* ── STEP 1 — Détails ── */}
-            {step === 1 && (
-              <motion.form onSubmit={handleSignUp} className="space-y-4">
-                <h3 className="text-lg font-semibold text-card-foreground mb-4">
-                  {role === "proche" ? "Informations Aidant" : "Informations Patient"}
-                </h3>
-                <div className="space-y-4">
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                    <input type="tel" placeholder="Numéro de téléphone" value={telephone} onChange={(e) => setTelephone(e.target.value)}
-                      className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                  </div>
-                  {fieldErrors.telephone && <p className="text-xs text-destructive">{fieldErrors.telephone}</p>}
 
                   {role === "patient" && (
                     <>
-                      <div className="relative">
-                        <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/50" />
-                        <input type="date" value={dateNaissance} max={new Date().toISOString().split("T")[0]}
-                          onChange={(e) => setDateNaissance(e.target.value)}
-                          className="w-full bg-muted/50 border border-border rounded-xl px-10 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-all" />
-                      </div>
-                      {fieldErrors.dateNaissance && <p className="text-xs text-destructive">{fieldErrors.dateNaissance}</p>}
-
+                      {/* Date naissance */}
                       <div>
-                        <p className="text-base font-semibold text-card-foreground mb-3">Maladies suivies</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 max-h-64 overflow-y-auto bg-muted/40 rounded-2xl p-4 border border-border/60">
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4" style={{ color: "rgba(74,157,135,0.55)" }} />
+                          <input type="date" value={dateNaissance} max={new Date().toISOString().split("T")[0]}
+                            onChange={e => setDateNaissance(e.target.value)} className="sg-input" />
+                        </div>
+                        {fieldErrors.dateNaissance && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.dateNaissance}</p>}
+                      </div>
+
+                      {/* Maladies */}
+                      <div>
+                        <p className="text-sm font-bold sg-sora mb-2" style={{ color: C.text }}>Maladies suivies</p>
+                        <div className="sg-scrollbox grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-52 overflow-y-auto p-4 rounded-2xl"
+                          style={{ background: "rgba(74,157,135,0.04)", border: "1px solid rgba(74,157,135,0.14)" }}>
                           {maladiesRef.map((m) => {
                             const checked = maladies.includes(m.nom);
                             return (
-                              <label key={m.id} className="flex items-start gap-3 text-sm text-foreground cursor-pointer rounded-xl p-2 hover:bg-muted/40 transition-colors">
-                                <input type="checkbox" checked={checked}
-                                  onChange={() => setMaladies((prev) => checked ? prev.filter((x) => x !== m.nom) : [...prev, m.nom])}
-                                  className="mt-0.5 h-4 w-4 rounded border-border accent-primary" />
+                              <label key={m.id} className="flex items-start gap-2.5 text-sm cursor-pointer rounded-xl p-2 transition-colors"
+                                style={{ color: C.text }}
+                                onMouseEnter={e => (e.currentTarget.style.background = "rgba(74,157,135,0.08)")}
+                                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
+                                <input type="checkbox" checked={checked} className="sg-checkbox"
+                                  onChange={() => setMaladies(prev => checked ? prev.filter(x => x !== m.nom) : [...prev, m.nom])} />
                                 <span className="leading-snug">{m.nom}</span>
                               </label>
                             );
                           })}
                         </div>
                         {maladies.includes("Autre") && (
-                          <div className="mt-3">
-                            <input type="text" placeholder="Exemple : Maladie auto-immune rare"
-                              value={autreMaladie} onChange={(e) => setAutreMaladie(e.target.value)}
-                              className="w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-all" />
-                          </div>
+                          <input type="text" placeholder="Exemple : Maladie auto-immune rare"
+                            value={autreMaladie} onChange={e => setAutreMaladie(e.target.value)}
+                            className="sg-input-bare mt-3" />
                         )}
-                        {fieldErrors.maladies && <p className="mt-1 text-xs text-destructive">{fieldErrors.maladies}</p>}
+                        {fieldErrors.maladies && <p className="text-xs mt-1" style={{ color: C.muted }}>{fieldErrors.maladies}</p>}
                       </div>
                     </>
                   )}
 
                   {role === "proche" && (
-                    <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl">
-                      <p className="text-sm text-foreground font-medium mb-1">👨‍👩‍👧 Compte Aidant</p>
-                      <p className="text-xs text-muted-foreground">
+                    <div className="p-4 rounded-2xl"
+                      style={{ background: "rgba(74,157,135,0.06)", border: "1px solid rgba(74,157,135,0.18)" }}>
+                      <p className="text-sm font-semibold sg-sora mb-1" style={{ color: C.text }}>👨‍👩‍👧 Compte Aidant</p>
+                      <p className="text-xs" style={{ color: C.textSoft }}>
                         Vous pourrez être associé à un patient depuis vos paramètres après la connexion.
                       </p>
                     </div>
                   )}
-                </div>
 
-                <div className="flex gap-3 mt-6">
-                  <button type="button" onClick={() => setStep(0)}
-                    className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm text-muted-foreground hover:text-foreground border border-border hover:border-primary/20 transition-all">
-                    <ArrowLeft className="w-4 h-4" /> Retour
-                  </button>
-                  <button type="submit" disabled={!canProceedStep1 || loading}
-                    className="flex-1 flex items-center justify-center gap-2 bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage disabled:opacity-50 disabled:cursor-not-allowed">
-                    {loading
-                      ? <><Loader className="w-4 h-4 animate-spin" /> Création du compte...</>
-                      : <>Créer mon compte <ArrowRight className="w-4 h-4" /></>
-                    }
-                  </button>
-                </div>
-              </motion.form>
-            )}
+                  <div className="flex gap-3 pt-2">
+                    <button type="button" onClick={() => setStep(0)}
+                      className="flex items-center gap-2 px-4 py-3 rounded-2xl text-sm font-semibold transition-all hover:scale-[1.02]"
+                      style={{
+                        background: "rgba(74,157,135,0.06)",
+                        color: C.textSoft,
+                        border: "1px solid rgba(74,157,135,0.18)",
+                      }}>
+                      <ArrowLeft className="w-4 h-4" /> Retour
+                    </button>
+                    <button type="submit" disabled={!canProceedStep1 || loading}
+                      className="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl text-sm font-bold sg-sora transition-all hover:scale-[1.01] disabled:opacity-50 disabled:cursor-not-allowed"
+                      style={{
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                        color: "#fff",
+                        boxShadow: "0 8px 28px rgba(74,157,135,0.35)",
+                      }}>
+                      {loading
+                        ? <><Loader className="w-4 h-4 animate-spin" /> Création du compte...</>
+                        : <>Créer mon compte <ArrowRight className="w-4 h-4" /></>
+                      }
+                    </button>
+                  </div>
+                </motion.form>
+              )}
 
-            {/* ── STEP 2 patient — Vérification email ── */}
-            {isEmailConfirmStep && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8 space-y-5">
-                <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto">
-                  <Mail className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <h3 className="text-xl font-bold text-card-foreground mb-2">Vérifiez votre email</h3>
-                  <p className="text-sm text-muted-foreground">
-                    Un lien de confirmation a été envoyé à{" "}
-                    <span className="font-semibold text-foreground">{registeredEmail}</span>.
+              {/* ── STEP 2 patient — Email confirm ── */}
+              {isEmailConfirmStep && (
+                <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+                  className="text-center py-6 space-y-5">
+                  <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                      boxShadow: "0 12px 32px rgba(74,157,135,0.30)",
+                    }}>
+                    <Mail className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold sg-sora mb-2" style={{ color: C.text }}>Vérifiez votre email</h3>
+                    <p className="text-sm" style={{ color: C.textSoft }}>
+                      Un lien de confirmation a été envoyé à{" "}
+                      <span className="font-semibold" style={{ color: C.text }}>{registeredEmail}</span>.
+                    </p>
+                  </div>
+
+                  {/* Next steps */}
+                  <div className="p-4 rounded-2xl text-left space-y-3"
+                    style={{ background: "rgba(74,157,135,0.06)", border: "1px solid rgba(74,157,135,0.18)" }}>
+                    <p className="text-xs font-bold sg-sora uppercase tracking-wide" style={{ color: C.primary }}>Prochaines étapes</p>
+                    {[
+                      { icon: Mail,       text: "Cliquez sur le lien dans votre email" },
+                      { icon: Check,      text: "Votre compte est activé automatiquement" },
+                      { icon: CreditCard, text: "Connectez-vous → commandez votre bracelet" },
+                      { icon: Clock,      text: "L'admin valide et prépare la livraison" },
+                    ].map((item, i) => (
+                      <div key={i} className="flex items-center gap-3 text-xs" style={{ color: C.textSoft }}>
+                        <item.icon className="w-3.5 h-3.5 shrink-0" style={{ color: C.primary }} />
+                        <span>{item.text}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button onClick={() => navigate("/login")}
+                    className="w-full py-3 rounded-2xl text-sm font-bold sg-sora transition-all hover:scale-[1.02]"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                      color: "#fff",
+                      boxShadow: "0 8px 28px rgba(74,157,135,0.35)",
+                    }}>
+                    Aller à la Connexion
+                  </button>
+                  <p className="text-xs" style={{ color: C.textSoft }}>
+                    Pas reçu ?{" "}
+                    <button
+                      onClick={async () => {
+                        const { error } = await supabase.auth.resend({ type: "signup", email: registeredEmail });
+                        if (error) setError("Impossible de renvoyer. Attendez quelques minutes.");
+                      }}
+                      className="font-semibold hover:underline" style={{ color: C.primary }}>
+                      Renvoyer l'email
+                    </button>
                   </p>
-                </div>
-                <div className="p-4 bg-primary/5 border border-primary/20 rounded-xl text-left space-y-3">
-                  <p className="text-xs font-semibold text-foreground uppercase tracking-wide">Prochaines étapes</p>
-                  {[
-                    { icon: Mail,       text: "Cliquez sur le lien dans votre email" },
-                    { icon: Check,      text: "Votre compte est activé automatiquement" },
-                    { icon: CreditCard, text: "Connectez-vous → commandez votre bracelet" },
-                    { icon: Clock,      text: "L'admin valide et prépare la livraison" },
-                  ].map((item, i) => (
-                    <div key={i} className="flex items-center gap-3 text-xs text-muted-foreground">
-                      <item.icon className="w-3.5 h-3.5 text-primary flex-shrink-0" />
-                      <span>{item.text}</span>
-                    </div>
-                  ))}
-                </div>
-                <button onClick={() => navigate("/login")}
-                  className="w-full bg-primary text-primary-foreground py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage">
-                  Aller à la Connexion
-                </button>
-                <p className="text-xs text-muted-foreground">
-                  Pas reçu ?{" "}
-                  <button
-                    onClick={async () => {
-                      const { error } = await supabase.auth.resend({ type: "signup", email: registeredEmail });
-                      if (error) setError("Impossible de renvoyer. Attendez quelques minutes.");
-                    }}
-                    className="text-primary hover:underline font-medium"
-                  >
-                    Renvoyer l'email
+                </motion.div>
+              )}
+
+              {/* ── STEP 2 proche — Confirmé ── */}
+              {isConfirmedStep && (
+                <motion.div initial={{ opacity: 0, scale: 0.97 }} animate={{ opacity: 1, scale: 1 }}
+                  className="text-center py-6 space-y-5">
+                  <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                      boxShadow: "0 12px 32px rgba(74,157,135,0.30)",
+                    }}>
+                    <Check className="w-8 h-8 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-bold sg-sora mb-2" style={{ color: C.text }}>Inscription Réussie !</h3>
+                    <p className="text-sm" style={{ color: C.textSoft }}>
+                      Vérifiez votre email pour confirmer votre compte, puis connectez-vous.
+                    </p>
+                  </div>
+                  <button onClick={() => navigate("/login")}
+                    className="w-full py-3 rounded-2xl text-sm font-bold sg-sora transition-all hover:scale-[1.02]"
+                    style={{
+                      background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                      color: "#fff",
+                      boxShadow: "0 8px 28px rgba(74,157,135,0.30)",
+                    }}>
+                    Aller à la Connexion
                   </button>
-                </p>
-              </motion.div>
+                </motion.div>
+              )}
+
+            </div>
+
+            {step < 2 && (
+              <p className="text-center text-xs mt-5" style={{ color: C.textSoft }}>
+                Déjà un compte ?{" "}
+                <Link to="/login" className="font-semibold hover:underline" style={{ color: C.primary }}>
+                  Se connecter
+                </Link>
+              </p>
             )}
-
-            {/* ── STEP 2 proche — Confirmé ── */}
-            {isConfirmedStep && (
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-8">
-                <div className="w-16 h-16 rounded-full bg-safe/10 flex items-center justify-center mx-auto mb-4">
-                  <Check className="w-8 h-8 text-safe" />
-                </div>
-                <h3 className="text-xl font-bold text-card-foreground mb-2">Inscription Réussie !</h3>
-                <p className="text-muted-foreground text-sm mb-6">
-                  Vérifiez votre email pour confirmer votre compte, puis connectez-vous.
-                </p>
-                <button onClick={() => navigate("/login")}
-                  className="bg-primary text-primary-foreground px-8 py-3 rounded-xl text-sm font-semibold hover:brightness-110 transition-all glow-sage">
-                  Aller à la Connexion
-                </button>
-              </motion.div>
-            )}
-
-          </div>
-
-          {step < 2 && (
-            <p className="text-center text-xs text-muted-foreground mt-6">
-              Déjà un compte ?{" "}
-              <Link to="/login" className="text-primary hover:underline font-medium">Se connecter</Link>
-            </p>
-          )}
-        </motion.div>
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

@@ -9,7 +9,7 @@ import { toast } from "sonner";
 
 interface Alerte {
   id: string;
-  patient_id: string;  // patients.id
+  patient_id: string;
   severity: string;
   type: string;
   message: string;
@@ -22,19 +22,12 @@ type SortOrder      = "desc" | "asc";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// Handle all possible Supabase enum values
 function normalizeSeverity(s: string): "critical" | "medium" | "low" {
   const v = (s || "").toUpperCase().trim();
   if (["CRITICAL", "CRITIQUE"].includes(v))              return "critical";
   if (["MEDIUM", "MOYEN", "HIGH", "ELEVE"].includes(v)) return "medium";
   return "low";
 }
-
-const SEV_CFG = {
-  critical: { label: "Critique",  border: "border-l-red-500",   icon: "critical", badge: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",    dot: "bg-red-500"   },
-  medium:   { label: "Moyen",     border: "border-l-amber-400", icon: "warning",  badge: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400", dot: "bg-amber-400" },
-  low:      { label: "Faible",    border: "border-l-primary",   icon: "info",     badge: "bg-primary/10 text-primary",                                        dot: "bg-primary"   },
-} as const;
 
 function timeAgo(dateStr: string) {
   const diff = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
@@ -44,11 +37,59 @@ function timeAgo(dateStr: string) {
   return `il y a ${Math.floor(diff / 86400)}j`;
 }
 
+// ─── Palette ──────────────────────────────────────────────────────────────────
+
+const C = {
+  primary:     "#4a9d87",
+  primaryDark: "#3d8c7a",
+  secondary:   "#5b8fa0",
+  text:        "#1a2e28",
+  textSoft:    "rgba(30,60,50,0.62)",
+  gold:        "#d4a843",
+  muted:       "#c0504a",
+};
+
+const glass: React.CSSProperties = {
+  background: "rgba(255,255,255,0.78)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(74,157,135,0.16)",
+  borderRadius: "22px",
+  boxShadow: "0 12px 36px rgba(30,60,50,0.06)",
+};
+
+const SEV_CFG = {
+  critical: {
+    label:  "Critique",
+    color:  C.muted,
+    bg:     "rgba(192,80,74,0.10)",
+    border: "rgba(192,80,74,0.30)",
+    left:   C.muted,
+    icon:   "critical",
+  },
+  medium: {
+    label:  "Moyen",
+    color:  C.gold,
+    bg:     "rgba(212,168,67,0.12)",
+    border: "rgba(212,168,67,0.30)",
+    left:   C.gold,
+    icon:   "warning",
+  },
+  low: {
+    label:  "Faible",
+    color:  C.primary,
+    bg:     "rgba(74,157,135,0.10)",
+    border: "rgba(74,157,135,0.28)",
+    left:   C.primary,
+    icon:   "info",
+  },
+} as const;
+
 // ─── Component ────────────────────────────────────────────────────────────────
 
 const FamilyAlerts = () => {
   const [alertes,         setAlertes]         = useState<Alerte[]>([]);
-  const [patientIds,      setPatientIds]      = useState<string[]>([]);  // patients.id
+  const [patientIds,      setPatientIds]      = useState<string[]>([]);
   const [nameByPatientId, setNameByPatientId] = useState<Record<string, string>>({});
   const [loading,         setLoading]         = useState(true);
 
@@ -58,20 +99,18 @@ const FamilyAlerts = () => {
 
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
-  // ── Load ────────────────────────────────────────────────────────────────────
+  // ── Load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { setLoading(false); return; }
 
-      // proche_patient.patient_id → utilisateurs.id
       const { data: links } = await supabase
         .from("proche_patient").select("patient_id").eq("proche_id", user.id);
       if (!links?.length) { setLoading(false); return; }
 
       const patientUserIds = links.map((l) => l.patient_id);
 
-      // patients rows — patients.id is what alerts use
       const { data: patientRows } = await supabase
         .from("patients").select("id, user_id").in("user_id", patientUserIds);
       if (!patientRows?.length) { setLoading(false); return; }
@@ -104,7 +143,7 @@ const FamilyAlerts = () => {
     load();
   }, []);
 
-  // ── Realtime ─────────────────────────────────────────────────────────────────
+  // ── Realtime ──────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!patientIds.length) return;
     const channel = supabase.channel("family-alerts-rt")
@@ -124,12 +163,9 @@ const FamilyAlerts = () => {
     return () => { if (channelRef.current) supabase.removeChannel(channelRef.current); };
   }, [patientIds, nameByPatientId]);
 
-  // ── Filtering ────────────────────────────────────────────────────────────────
+  // ── Filtering ─────────────────────────────────────────────────────────────
   const filtered = alertes
-    .filter((a) => {
-      if (filterSev === "toutes") return true;
-      return normalizeSeverity(a.severity) === filterSev;
-    })
+    .filter((a) => filterSev === "toutes" || normalizeSeverity(a.severity) === filterSev)
     .sort((a, b) => {
       const ta = new Date(a.created_at).getTime();
       const tb = new Date(b.created_at).getTime();
@@ -143,81 +179,157 @@ const FamilyAlerts = () => {
     low:      alertes.filter((a) => normalizeSeverity(a.severity) === "low").length,
   };
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <DashboardLayout role="family">
-      <div className="space-y-6 max-w-3xl">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        .fa-page * { font-family: 'DM Sans', sans-serif; }
+        .fa-page h1, .fa-sora { font-family: 'Sora', sans-serif !important; }
+        .fa-gradient-text {
+          background: linear-gradient(120deg, #3d8c7a 0%, #4a9d87 55%, #5b8fa0 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes faAurora {
+          0%,100% { transform: translate(0,0) scale(1); opacity: .48; }
+          50%      { transform: translate(26px,-16px) scale(1.05); opacity: .75; }
+        }
+        .fa-aurora { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; }
+        .fa-card { transition: transform .25s cubic-bezier(.22,1,.36,1), box-shadow .25s; }
+        .fa-card:hover { transform: translateY(-2px); box-shadow: 0 18px 44px rgba(30,60,50,0.09); }
+      `}</style>
 
-        {/* Header */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+      <div className="fa-page relative space-y-5 max-w-3xl">
+
+        {/* Aurora blobs */}
+        <div className="fa-aurora" style={{ width: 380, height: 380, background: "rgba(192,80,74,0.09)", top: -80, right: -60, animation: "faAurora 22s ease-in-out infinite" }} />
+        <div className="fa-aurora" style={{ width: 300, height: 300, background: "rgba(74,157,135,0.11)", top: 320, left: -100, animation: "faAurora 18s ease-in-out infinite reverse" }} />
+
+        {/* ── Header ── */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          className="p-6 rounded-3xl relative overflow-hidden" style={glass}>
           <div className="flex items-start justify-between flex-wrap gap-3">
-            <div>
-              <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-                <Bell className="w-6 h-6 text-primary" /> Alertes
-              </h1>
-              <p className="text-muted-foreground text-sm mt-1">Historique en temps réel</p>
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+                style={{
+                  background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                  boxShadow: "0 8px 24px rgba(74,157,135,0.30)",
+                }}>
+                <Bell className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h1 className="text-3xl font-bold tracking-tight fa-sora" style={{ color: C.text }}>
+                  Mes <span className="fa-gradient-text">Alertes</span>
+                </h1>
+                <p className="text-sm mt-1" style={{ color: C.textSoft }}>Historique en temps réel</p>
+              </div>
             </div>
+
             {counts.critical > 0 && (
-              <div className="flex items-center gap-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-xl px-4 py-2">
-                <Zap className="w-4 h-4 text-red-500 animate-pulse" />
-                <span className="text-sm font-semibold text-red-600 dark:text-red-400">{counts.critical} critique{counts.critical > 1 ? "s" : ""}</span>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-2xl"
+                style={{
+                  background: "rgba(192,80,74,0.10)",
+                  border: "1px solid rgba(192,80,74,0.28)",
+                  boxShadow: "0 6px 18px rgba(192,80,74,0.12)",
+                }}>
+                <Zap className="w-4 h-4 animate-pulse" style={{ color: C.muted }} />
+                <span className="text-sm font-semibold fa-sora" style={{ color: C.muted }}>
+                  {counts.critical} critique{counts.critical > 1 ? "s" : ""}
+                </span>
               </div>
             )}
           </div>
         </motion.div>
 
-        {/* Stats */}
+        {/* ── Stats ── */}
         {!loading && alertes.length > 0 && (
           <div className="grid grid-cols-3 gap-3">
             {[
-              { label: "Total",     value: counts.total,    cls: "text-foreground" },
-              { label: "Critiques", value: counts.critical, cls: counts.critical > 0 ? "text-red-500" : "text-foreground" },
-              { label: "Moyennes",  value: counts.medium,   cls: counts.medium > 0  ? "text-amber-500" : "text-foreground" },
+              { label: "Total",     value: counts.total,    color: C.text,      bg: "rgba(74,157,135,0.06)",  border: "rgba(74,157,135,0.14)" },
+              { label: "Critiques", value: counts.critical, color: counts.critical > 0 ? C.muted    : C.text, bg: counts.critical > 0 ? "rgba(192,80,74,0.07)"  : "rgba(74,157,135,0.06)",  border: counts.critical > 0 ? "rgba(192,80,74,0.20)"  : "rgba(74,157,135,0.14)" },
+              { label: "Moyennes",  value: counts.medium,   color: counts.medium  > 0 ? C.gold      : C.text, bg: counts.medium  > 0 ? "rgba(212,168,67,0.08)" : "rgba(74,157,135,0.06)",  border: counts.medium  > 0 ? "rgba(212,168,67,0.22)" : "rgba(74,157,135,0.14)" },
             ].map((s) => (
-              <div key={s.label} className="bg-card border border-border rounded-2xl p-4 text-center shadow-sm">
-                <p className={`text-2xl font-bold ${s.cls}`}>{s.value}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">{s.label}</p>
-              </div>
+              <motion.div key={s.label}
+                initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+                className="fa-card text-center p-4 rounded-[18px]"
+                style={{ background: s.bg, border: `1px solid ${s.border}`, backdropFilter: "blur(8px)" }}>
+                <p className="text-2xl font-bold fa-sora" style={{ color: s.color }}>{s.value}</p>
+                <p className="text-xs mt-0.5 font-medium" style={{ color: C.textSoft }}>{s.label}</p>
+              </motion.div>
             ))}
           </div>
         )}
 
-        {/* Filter bar */}
+        {/* ── Filter chips ── */}
         <div className="space-y-3">
           <div className="flex flex-wrap gap-2 items-center">
             {([
-              { id: "toutes",   label: `Toutes${counts.total ? ` (${counts.total})` : ""}` },
+              { id: "toutes",   label: `Toutes${counts.total    ? ` (${counts.total})`    : ""}` },
               { id: "critical", label: `Critiques${counts.critical ? ` (${counts.critical})` : ""}` },
-              { id: "medium",   label: `Moyennes${counts.medium ? ` (${counts.medium})` : ""}` },
-              { id: "low",      label: `Faibles${counts.low ? ` (${counts.low})` : ""}` },
+              { id: "medium",   label: `Moyennes${counts.medium   ? ` (${counts.medium})`   : ""}` },
+              { id: "low",      label: `Faibles${counts.low      ? ` (${counts.low})`      : ""}` },
             ] as { id: FilterSeverity; label: string }[]).map((f) => (
               <button key={f.id} onClick={() => setFilterSev(f.id)}
-                className={`px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
-                  filterSev === f.id ? "bg-primary text-primary-foreground shadow-sm" : "bg-muted text-muted-foreground hover:text-foreground"
-                }`}>
+                className="px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all fa-sora"
+                style={
+                  filterSev === f.id
+                    ? {
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                        color: "#fff",
+                        border: `1px solid ${C.primary}`,
+                        boxShadow: "0 4px 14px rgba(74,157,135,0.28)",
+                      }
+                    : {
+                        background: "rgba(255,255,255,0.65)",
+                        color: C.textSoft,
+                        border: "1px solid rgba(74,157,135,0.18)",
+                      }
+                }>
                 {f.label}
               </button>
             ))}
 
-            <button onClick={() => setShowFilters((v) => !v)}
-              className={`ml-auto flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-sm font-medium border transition-all ${showFilters ? "bg-primary/10 border-primary/30 text-primary" : "border-border text-muted-foreground hover:text-foreground"}`}>
+            <button
+              onClick={() => setShowFilters((v) => !v)}
+              className="ml-auto flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-semibold transition-all fa-sora"
+              style={
+                showFilters
+                  ? { background: "rgba(74,157,135,0.12)", color: C.primaryDark, border: "1px solid rgba(74,157,135,0.28)" }
+                  : { background: "rgba(255,255,255,0.65)", color: C.textSoft, border: "1px solid rgba(74,157,135,0.18)" }
+              }>
               <Filter className="w-3.5 h-3.5" />
               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showFilters ? "rotate-180" : ""}`} />
             </button>
           </div>
 
+          {/* Sort panel */}
           <AnimatePresence>
             {showFilters && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
-                <div className="bg-card border border-border rounded-2xl p-4">
-                  <p className="text-xs font-medium text-muted-foreground mb-2">Trier par date</p>
+              <motion.div
+                initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }}
+                className="overflow-hidden">
+                <div className="p-4 rounded-[18px]" style={glass}>
+                  <p className="text-xs font-semibold mb-2.5 fa-sora uppercase tracking-wider" style={{ color: C.textSoft }}>Trier par date</p>
                   <div className="flex gap-2">
                     {([
                       { id: "desc", label: "Plus récentes en premier" },
                       { id: "asc",  label: "Plus anciennes en premier" },
                     ] as { id: SortOrder; label: string }[]).map((s) => (
                       <button key={s.id} onClick={() => setSortOrder(s.id)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${sortOrder === s.id ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:text-foreground"}`}>
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition-all fa-sora"
+                        style={
+                          sortOrder === s.id
+                            ? {
+                                background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                                color: "#fff",
+                                boxShadow: "0 4px 12px rgba(74,157,135,0.25)",
+                              }
+                            : {
+                                background: "rgba(74,157,135,0.07)",
+                                color: C.textSoft,
+                                border: "1px solid rgba(74,157,135,0.16)",
+                              }
+                        }>
                         {s.label}
                       </button>
                     ))}
@@ -228,31 +340,43 @@ const FamilyAlerts = () => {
           </AnimatePresence>
         </div>
 
-        {/* Loading skeletons */}
+        {/* ── Loading skeletons ── */}
         {loading && (
           <div className="space-y-3">
-            {[1, 2, 3].map((i) => <div key={i} className="h-24 rounded-2xl border border-border bg-card animate-pulse" />)}
+            {[1, 2, 3].map((i) => (
+              <div key={i} className="h-24 rounded-[18px] animate-pulse"
+                style={{ background: "rgba(74,157,135,0.07)", border: "1px solid rgba(74,157,135,0.12)" }} />
+            ))}
           </div>
         )}
 
-        {/* No alerts at all */}
+        {/* ── No alerts at all ── */}
         {!loading && alertes.length === 0 && (
-          <div className="text-center py-20 bg-card border border-border rounded-2xl">
-            <Heart className="w-12 h-12 text-primary/30 mx-auto mb-4" />
-            <p className="text-sm font-semibold text-foreground">Aucune alerte pour vos proches</p>
-            <p className="text-xs text-muted-foreground mt-1">Tout va bien ✓</p>
+          <div className="py-20 text-center rounded-[22px]" style={glass}>
+            <div className="w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4"
+              style={{
+                background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                boxShadow: "0 12px 28px rgba(74,157,135,0.28)",
+              }}>
+              <Heart className="w-8 h-8 text-white" />
+            </div>
+            <p className="text-sm font-semibold fa-sora" style={{ color: C.text }}>Aucune alerte pour vos proches</p>
+            <p className="text-xs mt-1" style={{ color: C.textSoft }}>Tout va bien ✓</p>
           </div>
         )}
 
-        {/* Filter returns nothing */}
+        {/* ── Filter returns nothing ── */}
         {!loading && alertes.length > 0 && filtered.length === 0 && (
-          <div className="text-center py-14 bg-card border border-border rounded-2xl">
-            <Filter className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-sm text-muted-foreground">Aucune alerte dans cette catégorie</p>
+          <div className="py-14 text-center rounded-[22px]" style={glass}>
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center mx-auto mb-3"
+              style={{ background: "rgba(74,157,135,0.10)" }}>
+              <Filter className="w-6 h-6" style={{ color: C.primary }} />
+            </div>
+            <p className="text-sm fa-sora" style={{ color: C.textSoft }}>Aucune alerte dans cette catégorie</p>
           </div>
         )}
 
-        {/* Alert list */}
+        {/* ── Alert list ── */}
         {!loading && filtered.length > 0 && (
           <div className="space-y-3">
             <AnimatePresence initial={false}>
@@ -263,24 +387,40 @@ const FamilyAlerts = () => {
                   <motion.div key={a.id}
                     initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, scale: 0.97 }}
                     transition={{ delay: Math.min(i * 0.025, 0.25) }}
-                    className={`bg-card border border-border border-l-4 ${cfg.border} rounded-2xl overflow-hidden shadow-sm`}>
+                    className="fa-card overflow-hidden"
+                    style={{
+                      ...glass,
+                      borderLeft: `3px solid ${cfg.left}`,
+                    }}>
                     <div className="p-4 flex items-start gap-3">
-                      <div className="flex-shrink-0 mt-0.5 relative">
-                        {cfg.icon === "critical" && <AlertCircle className="w-5 h-5 text-red-500" />}
-                        {cfg.icon === "warning"  && <AlertCircle className="w-5 h-5 text-amber-500" />}
-                        {cfg.icon === "info"     && <Info className="w-5 h-5 text-primary" />}
-                        {/* Pulse dot for critical */}
-                        {sev === "critical" && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-red-500 animate-pulse" />}
+                      <div className="shrink-0 mt-0.5 relative">
+                        {cfg.icon === "critical" && <AlertCircle className="w-5 h-5" style={{ color: C.muted }} />}
+                        {cfg.icon === "warning"  && <AlertCircle className="w-5 h-5" style={{ color: C.gold }} />}
+                        {cfg.icon === "info"     && <Info        className="w-5 h-5" style={{ color: C.primary }} />}
+                        {sev === "critical" && (
+                          <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full animate-pulse"
+                            style={{ background: C.muted }} />
+                        )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2 mb-1">
-                          <p className="text-xs font-semibold text-primary">{a.patient_nom}</p>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${cfg.badge}`}>{cfg.label}</span>
+                          <p className="text-xs font-semibold fa-sora" style={{ color: C.primaryDark }}>{a.patient_nom}</p>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold shrink-0 fa-sora"
+                            style={{ background: cfg.bg, color: cfg.color, border: `1px solid ${cfg.border}` }}>
+                            {cfg.label}
+                          </span>
                         </div>
-                        <p className="text-sm text-foreground leading-relaxed">{a.message}</p>
+                        <p className="text-sm leading-relaxed" style={{ color: C.text }}>{a.message}</p>
                         <div className="flex flex-wrap items-center gap-2 mt-2">
-                          {a.type && <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{a.type}</span>}
-                          <span className="flex items-center gap-1 text-xs text-muted-foreground"><Clock className="w-3 h-3" />{timeAgo(a.created_at)}</span>
+                          {a.type && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium"
+                              style={{ background: "rgba(74,157,135,0.08)", color: C.textSoft }}>
+                              {a.type}
+                            </span>
+                          )}
+                          <span className="flex items-center gap-1 text-xs" style={{ color: C.textSoft }}>
+                            <Clock className="w-3 h-3" />{timeAgo(a.created_at)}
+                          </span>
                         </div>
                       </div>
                     </div>

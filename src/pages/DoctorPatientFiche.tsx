@@ -49,6 +49,27 @@ interface Analyse {
   created_at: string; submitted_at: string | null;
 }
 
+// ─── Palette ─────────────────────────────────────────────────────────────────
+
+const C = {
+  primary:     "#4a9d87",
+  primaryDark: "#3d8c7a",
+  secondary:   "#5b8fa0",
+  text:        "#1a2e28",
+  textSoft:    "rgba(30,60,50,0.62)",
+  gold:        "#d4a843",
+  muted:       "#c0504a",
+};
+
+const glass: React.CSSProperties = {
+  background: "rgba(255,255,255,0.82)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(74,157,135,0.18)",
+  borderRadius: "18px",
+  boxShadow: "0 8px 32px rgba(30,60,50,0.08), 0 1px 0 rgba(255,255,255,0.9) inset",
+};
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const JOURS = [
@@ -66,8 +87,16 @@ const ANALYSE_TYPES = [
   "Scanner", "IRM", "Électrocardiogramme", "Analyse urine", "Autre",
 ];
 
-// ─── FIX: Correct bucket name ─────────────────────────────────────────────────
 const ANALYSES_BUCKET = "medical-analyses";
+
+// ─── Severity config ──────────────────────────────────────────────────────────
+
+const SEVERITY_CFG: Record<string, { color: string; bg: string; border: string }> = {
+  CRITICAL: { color: C.muted,    bg: "rgba(192,80,74,0.10)",  border: "rgba(192,80,74,0.28)"  },
+  HIGH:     { color: "#d4843a",  bg: "rgba(212,132,58,0.10)", border: "rgba(212,132,58,0.28)" },
+  MEDIUM:   { color: C.gold,     bg: "rgba(212,168,67,0.12)", border: "rgba(212,168,67,0.28)" },
+  LOW:      { color: C.primary,  bg: "rgba(74,157,135,0.10)", border: "rgba(74,157,135,0.25)" },
+};
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -76,18 +105,11 @@ const age = (dob: string) => {
   return Math.floor((Date.now() - new Date(dob).getTime()) / (1000 * 60 * 60 * 24 * 365.25));
 };
 
-const severityColor: Record<string, string> = {
-  CRITICAL: "text-red-500 bg-red-500/10 border-red-500/20",
-  HIGH:     "text-orange-500 bg-orange-500/10 border-orange-500/20",
-  MEDIUM:   "text-yellow-500 bg-yellow-500/10 border-yellow-500/20",
-  LOW:      "text-green-500 bg-green-500/10 border-green-500/20",
-};
-
 const batteryColor = (level: number | null) => {
-  if (!level) return "text-muted-foreground";
-  if (level > 60) return "text-green-500";
-  if (level > 30) return "text-yellow-500";
-  return "text-red-500";
+  if (!level) return C.textSoft;
+  if (level > 60) return "#5aaa6e";
+  if (level > 30) return C.gold;
+  return C.muted;
 };
 
 const getNextOccurrence = (targetDay: number): Date => {
@@ -138,22 +160,13 @@ const getBpmStatus  = (v: number | null): "safe" | "warning" | "critical" => { i
 const getSpo2Status = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v < 90) return "critical"; if (v < 95) return "warning"; return "safe"; };
 const getTempStatus = (v: number | null): "safe" | "warning" | "critical" => { if (!v) return "safe"; if (v > 39.5 || v < 35) return "critical"; if (v > 37.5) return "warning"; return "safe"; };
 
-// ─── FIX: Extract storage path from full Supabase public URL ─────────────────
-// The file_url stored in DB is a full public URL like:
-//   https://<project>.supabase.co/storage/v1/object/public/medical-analyses/analyses/UUID/file.pdf
-// We need to extract everything AFTER the bucket name:
-//   analyses/UUID/file.pdf
-// That is the correct path to pass to createSignedUrl on the "medical-analyses" bucket.
 const extractStoragePath = (fileUrl: string): string => {
   try {
     const url = new URL(fileUrl);
     const pathname = url.pathname;
-    // Match /object/public/<bucket>/<path> or /object/sign/<bucket>/<path>
     const match = pathname.match(/\/object\/(?:public|sign)\/[^/]+\/(.+)/);
     if (match) return match[1];
-  } catch {
-    // Not a valid URL — return as-is (treat as raw storage path)
-  }
+  } catch {}
   return fileUrl;
 };
 
@@ -163,11 +176,14 @@ const Section = ({ title, icon, children, className = "", action }: {
   title: string; icon: React.ReactNode; children: React.ReactNode;
   className?: string; action?: React.ReactNode;
 }) => (
-  <div className={`bg-card border border-border rounded-2xl p-5 shadow-sm ${className}`}>
+  <div className={`p-5 ${className}`} style={glass}>
     <div className="flex items-center justify-between mb-4">
-      <div className="flex items-center gap-2">
-        <span className="text-primary">{icon}</span>
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+      <div className="flex items-center gap-2.5">
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
+          style={{ background: "rgba(74,157,135,0.12)" }}>
+          <span style={{ color: C.primary }}>{icon}</span>
+        </div>
+        <h3 className="text-sm font-semibold dp-sora" style={{ color: C.text }}>{title}</h3>
       </div>
       {action}
     </div>
@@ -176,10 +192,39 @@ const Section = ({ title, icon, children, className = "", action }: {
 );
 
 const consultationStatusBadge = (status: string) => {
-  if (status === "planifiee") return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-blue-500/10 text-blue-600">Planifiée</span>;
-  if (status === "terminee")  return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-500/10 text-green-600">Terminée</span>;
-  if (status === "annulee")   return <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-500/10 text-red-600">Annulée</span>;
+  if (status === "planifiee") return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+      style={{ background: "rgba(91,143,160,0.12)", color: C.secondary, border: "1px solid rgba(91,143,160,0.28)" }}>
+      Planifiée
+    </span>
+  );
+  if (status === "terminee") return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+      style={{ background: "rgba(74,157,135,0.10)", color: C.primaryDark, border: "1px solid rgba(74,157,135,0.25)" }}>
+      Terminée
+    </span>
+  );
+  if (status === "annulee") return (
+    <span className="px-2 py-0.5 rounded-full text-xs font-semibold"
+      style={{ background: "rgba(192,80,74,0.10)", color: C.muted, border: "1px solid rgba(192,80,74,0.25)" }}>
+      Annulée
+    </span>
+  );
   return null;
+};
+
+// ─── Shared input style ───────────────────────────────────────────────────────
+
+const inputStyle: React.CSSProperties = {
+  width: "100%",
+  background: "rgba(255,255,255,0.70)",
+  border: "1px solid rgba(74,157,135,0.22)",
+  borderRadius: "12px",
+  padding: "9px 12px",
+  fontSize: "13px",
+  color: C.text,
+  outline: "none",
+  fontFamily: "'DM Sans', sans-serif",
 };
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -188,7 +233,6 @@ const DoctorPatientFiche = () => {
   const { patientId } = useParams<{ patientId: string }>();
   const navigate = useNavigate();
 
-  // ── Core states ──
   const [patient, setPatient]             = useState<PatientFiche | null>(null);
   const [device, setDevice]               = useState<Device | null>(null);
   const [latestVital, setLatestVital]     = useState<VitalSign | null>(null);
@@ -201,7 +245,6 @@ const DoctorPatientFiche = () => {
   const [notesSaved, setNotesSaved]       = useState(false);
   const [loading, setLoading]             = useState(true);
 
-  // ── Consultation states ──
   const [consultations, setConsultations]         = useState<Consultation[]>([]);
   const [showConsultForm, setShowConsultForm]     = useState(false);
   const [consultLoading, setConsultLoading]       = useState(false);
@@ -212,14 +255,12 @@ const DoctorPatientFiche = () => {
   const [selectedDay, setSelectedDay]             = useState<number | null>(null);
   const [overdueAlertSent, setOverdueAlertSent]   = useState(false);
 
-  // ── Analyses states ──
   const [analyses, setAnalyses]               = useState<Analyse[]>([]);
   const [showAnalyseForm, setShowAnalyseForm] = useState(false);
   const [analyseLoading, setAnalyseLoading]   = useState(false);
   const [analyseForm, setAnalyseForm]         = useState({ type: "", note_medecin: "" });
   const [openingFile, setOpeningFile]         = useState<string | null>(null);
 
-  // ── Realtime vitals ──
   const [deviceId, setDeviceId]     = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
 
@@ -229,8 +270,6 @@ const DoctorPatientFiche = () => {
     setShowConsultForm(true);
     setTimeout(() => consultSectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   };
-
-  // ─── Loaders ──────────────────────────────────────────────────────────────
 
   const loadConsultations = async (pid: string): Promise<Consultation[]> => {
     const { data } = await supabase
@@ -252,8 +291,6 @@ const DoctorPatientFiche = () => {
       .order("created_at", { ascending: false });
     setAnalyses((data as Analyse[]) || []);
   };
-
-  // ─── Main data loader ──────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     if (!patientId) return;
@@ -286,7 +323,6 @@ const DoctorPatientFiche = () => {
       .eq("patient_id", patientId)
       .order("created_at", { ascending: false })
       .limit(1).maybeSingle();
-
     setDevice(devData as Device | null);
 
     if (devData) {
@@ -338,8 +374,6 @@ const DoctorPatientFiche = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  // ─── Realtime vitals ───────────────────────────────────────────────────────
-
   useEffect(() => {
     if (!deviceId) return;
     const channel = supabase
@@ -356,8 +390,6 @@ const DoctorPatientFiche = () => {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [deviceId]);
-
-  // ─── Handlers: Overdue alert ───────────────────────────────────────────────
 
   const sendOverdueAlert = async (pid: string, nom: string, prenom: string, cDay: number) => {
     if (overdueAlertSent) return;
@@ -378,8 +410,6 @@ const DoctorPatientFiche = () => {
     toast.warning(`⚠️ Consultation du ${JOURS[cDay].label} non planifiée pour ${prenom} ${nom}`);
   };
 
-  // ─── Handlers: Consultation day ────────────────────────────────────────────
-
   const handleSaveConsultationDay = async () => {
     if (!patient || selectedDay === null) return;
     setSavingConsultDay(true);
@@ -395,21 +425,13 @@ const DoctorPatientFiche = () => {
         message: `Votre médecin a défini le ${JOURS[selectedDay].label} comme votre jour de consultation hebdomadaire.`,
         read: false,
       });
-    } else {
-      toast.error("Erreur lors de la sauvegarde");
-    }
+    } else { toast.error("Erreur lors de la sauvegarde"); }
     setSavingConsultDay(false);
   };
 
-  // ─── Handlers: Consultations ───────────────────────────────────────────────
-
   const handlePlanifierConsultation = async () => {
-    if (!patient || !consultForm.zoom_link || !consultForm.scheduled_at) {
-      toast.error("Lien Zoom et date/heure sont obligatoires."); return;
-    }
-    if (!consultForm.zoom_link.startsWith("http")) {
-      toast.error("Le lien Zoom doit commencer par http:// ou https://"); return;
-    }
+    if (!patient || !consultForm.zoom_link || !consultForm.scheduled_at) { toast.error("Lien Zoom et date/heure sont obligatoires."); return; }
+    if (!consultForm.zoom_link.startsWith("http")) { toast.error("Le lien Zoom doit commencer par http:// ou https://"); return; }
     setConsultLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -430,11 +452,8 @@ const DoctorPatientFiche = () => {
       setConsultForm({ zoom_link: "", scheduled_at: "", notes: "" });
       setShowConsultForm(false);
       await loadConsultations(patient.id);
-    } catch (err: any) {
-      toast.error("Erreur : " + err.message);
-    } finally {
-      setConsultLoading(false);
-    }
+    } catch (err: any) { toast.error("Erreur : " + err.message); }
+    finally { setConsultLoading(false); }
   };
 
   const handleTerminerConsultation = async (id: string) => {
@@ -450,12 +469,8 @@ const DoctorPatientFiche = () => {
     if (!error) { toast.success("Consultation annulée."); if (patient) await loadConsultations(patient.id); }
   };
 
-  // ─── Handlers: Analyses ────────────────────────────────────────────────────
-
   const handleDemanderAnalyse = async () => {
-    if (!patient || !analyseForm.type) {
-      toast.error("Veuillez choisir un type d'analyse"); return;
-    }
+    if (!patient || !analyseForm.type) { toast.error("Veuillez choisir un type d'analyse"); return; }
     setAnalyseLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -477,51 +492,26 @@ const DoctorPatientFiche = () => {
       setAnalyseForm({ type: "", note_medecin: "" });
       setShowAnalyseForm(false);
       await loadAnalyses(patient.id);
-    } catch (err: any) {
-      toast.error("Erreur : " + err.message);
-    } finally {
-      setAnalyseLoading(false);
-    }
+    } catch (err: any) { toast.error("Erreur : " + err.message); }
+    finally { setAnalyseLoading(false); }
   };
 
   const handleMarquerVue = async (analyseId: string) => {
     const { error } = await supabase.from("medical_analyses")
-      .update({ statut: "vue", viewed_at: new Date().toISOString() })
-      .eq("id", analyseId);
-    if (!error && patient) {
-      await loadAnalyses(patient.id);
-      toast.success("Analyse marquée comme consultée.");
-    }
+      .update({ statut: "vue", viewed_at: new Date().toISOString() }).eq("id", analyseId);
+    if (!error && patient) { await loadAnalyses(patient.id); toast.success("Analyse marquée comme consultée."); }
   };
 
-  // ─── Handler: Open analyse file via signed URL (FIXED) ────────────────────
-  // Bucket: "medical-analyses"
-  // Path inside bucket: "analyses/UUID/filename.pdf"
   const handleOpenAnalyse = async (analyseId: string, fileUrl: string, fileName: string) => {
     setOpeningFile(analyseId);
     try {
       const path = extractStoragePath(fileUrl);
-
-      const { data, error } = await supabase.storage
-        .from(ANALYSES_BUCKET)
-        .createSignedUrl(path, 60 * 60); // 1-hour expiry
-
-      if (error || !data?.signedUrl) {
-        console.error("Signed URL error:", error);
-        toast.error("Impossible d'ouvrir le fichier.");
-        return;
-      }
-
+      const { data, error } = await supabase.storage.from(ANALYSES_BUCKET).createSignedUrl(path, 60 * 60);
+      if (error || !data?.signedUrl) { toast.error("Impossible d'ouvrir le fichier."); return; }
       window.open(data.signedUrl, "_blank", "noopener,noreferrer");
-    } catch (err) {
-      console.error("Open analyse error:", err);
-      toast.error("Erreur lors de l'ouverture du fichier");
-    } finally {
-      setOpeningFile(null);
-    }
+    } catch (err) { toast.error("Erreur lors de l'ouverture du fichier"); }
+    finally { setOpeningFile(null); }
   };
-
-  // ─── Handlers: Other ──────────────────────────────────────────────────────
 
   const handleSaveNotes = async () => {
     if (!patient) return;
@@ -562,8 +552,6 @@ const DoctorPatientFiche = () => {
     if (convId) navigate(`/doctor/messages?tab=proches&conversation=${convId}`);
   };
 
-  // ─── Derived ──────────────────────────────────────────────────────────────
-
   const chartData = vitalsHistory.map(v => ({
     time: new Date(v.recorded_at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" }),
     BPM: v.bpm, SpO2: v.spo2, Température: v.temperature,
@@ -574,14 +562,15 @@ const DoctorPatientFiche = () => {
   const nextOccurrence        = consultationDay !== null ? getNextOccurrence(consultationDay) : null;
   const isToday               = nextOccurrence ? nextOccurrence.toDateString() === new Date().toDateString() : false;
   const newSubmissions        = analyses.filter(a => a.statut === "soumise").length;
+  const formatTime = (d: Date) => d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-  const formatTime = (d: Date) =>
-    d.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const isOnline = device?.actif && device?.dernier_signal
+    ? Date.now() - new Date(device.dernier_signal).getTime() < 5 * 60 * 1000 : false;
 
   if (loading) return (
     <DashboardLayout role="doctor">
       <div className="flex items-center justify-center h-96">
-        <Loader className="w-8 h-8 text-primary animate-spin" />
+        <Loader className="w-8 h-8 animate-spin" style={{ color: C.primary }} />
       </div>
     </DashboardLayout>
   );
@@ -589,595 +578,767 @@ const DoctorPatientFiche = () => {
 
   const initials = `${patient.prenom?.[0] || ""}${patient.nom?.[0] || ""}`.toUpperCase() || "?";
   const fullName = [patient.prenom, patient.nom].filter(Boolean).join(" ") || "—";
-  const isOnline = device?.actif && device?.dernier_signal
-    ? Date.now() - new Date(device.dernier_signal).getTime() < 5 * 60 * 1000 : false;
 
   return (
     <DashboardLayout role="doctor">
-      <div className="max-w-7xl space-y-6">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        .dp-root {
+          font-family: 'DM Sans', sans-serif;
+          position: relative;
+          min-height: 100vh;
+          background: linear-gradient(135deg, #edf7f4 0%, #e6f2f7 50%, #f0f7f5 100%);
+          margin: -24px;
+          padding: 24px;
+        }
+        .dp-root h1, .dp-root h2, .dp-root h3, .dp-sora { font-family: 'Sora', sans-serif !important; }
+        .dp-gradient-text {
+          background: linear-gradient(120deg, #3d8c7a 0%, #4a9d87 55%, #5b8fa0 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes dpAurora {
+          0%,100% { transform: translate(0,0) scale(1); opacity:.50; }
+          50%      { transform: translate(24px,-16px) scale(1.05); opacity:.80; }
+        }
+        .dp-aurora { position:fixed; border-radius:50%; filter:blur(90px); pointer-events:none; z-index:0; }
+        .dp-content { position:relative; z-index:1; }
+        .dp-input {
+          width:100%; background:rgba(255,255,255,0.70); border:1px solid rgba(74,157,135,0.22);
+          border-radius:12px; padding:9px 12px; font-size:13px; color:#1a2e28;
+          outline:none; transition:border .2s, box-shadow .2s; font-family:'DM Sans',sans-serif;
+        }
+        .dp-input:focus { border-color:rgba(74,157,135,0.50); box-shadow:0 0 0 3px rgba(74,157,135,0.10); }
+        .dp-btn-primary {
+          display:inline-flex; align-items:center; gap:6px;
+          background:linear-gradient(135deg,#4a9d87,#5b8fa0);
+          color:#fff; border:none; border-radius:12px; padding:8px 16px;
+          font-size:13px; font-weight:600; cursor:pointer;
+          transition:transform .2s, box-shadow .2s; font-family:'DM Sans',sans-serif;
+          box-shadow: 0 4px 14px rgba(74,157,135,0.28);
+        }
+        .dp-btn-primary:hover:not(:disabled) { transform:scale(1.02); box-shadow:0 6px 20px rgba(74,157,135,0.35); }
+        .dp-btn-primary:disabled { opacity:.50; cursor:not-allowed; }
+        .dp-btn-ghost {
+          display:inline-flex; align-items:center; gap:5px;
+          background:rgba(74,157,135,0.08); color:#3d8c7a;
+          border:1px solid rgba(74,157,135,0.22); border-radius:10px;
+          padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer;
+          transition:all .18s; font-family:'DM Sans',sans-serif;
+        }
+        .dp-btn-ghost:hover { background:rgba(74,157,135,0.14); transform:scale(1.02); }
+        .dp-btn-danger {
+          display:inline-flex; align-items:center; gap:5px;
+          background:rgba(192,80,74,0.08); color:#c0504a;
+          border:1px solid rgba(192,80,74,0.22); border-radius:10px;
+          padding:6px 12px; font-size:12px; font-weight:600; cursor:pointer; transition:all .18s;
+          font-family:'DM Sans',sans-serif;
+        }
+        .dp-btn-danger:hover { background:rgba(192,80,74,0.14); }
+        .dp-chart-tooltip { background:rgba(255,255,255,0.95)!important; border:1px solid rgba(74,157,135,0.20)!important; border-radius:10px!important; font-size:12px!important; }
+      `}</style>
 
-        {/* ── Header ── */}
-        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          <button onClick={() => navigate("/doctor/patients")}
-            className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <ArrowLeft className="w-4 h-4" /> Retour aux patients
-          </button>
-          <div className="bg-card border border-border rounded-2xl p-6 shadow-sm">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="flex items-center gap-4">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center text-primary font-bold text-2xl">{initials}</div>
-                  <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-card ${isOnline ? "bg-green-500" : "bg-muted-foreground"}`} />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-bold text-foreground">{fullName}</h1>
-                  <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-muted-foreground">
-                    {patient.date_naissance && <span>{age(patient.date_naissance)} ans</span>}
-                    {patient.sexe && <span>• {patient.sexe}</span>}
-                    {patient.maladies?.[0] && <span>• {patient.maladies[0]}</span>}
+      <div className="dp-root">
+        {/* Aurora orbs */}
+        <div className="dp-aurora" style={{ width:460, height:460, background:"rgba(74,157,135,0.14)", top:"2%",  right:"2%",  animation:"dpAurora 22s ease-in-out infinite" }} />
+        <div className="dp-aurora" style={{ width:360, height:360, background:"rgba(91,143,160,0.11)", top:"55%", left:"0%",   animation:"dpAurora 18s ease-in-out infinite reverse" }} />
+        <div className="dp-aurora" style={{ width:280, height:280, background:"rgba(212,168,67,0.07)", bottom:"5%",right:"20%", animation:"dpAurora 28s ease-in-out infinite 5s" }} />
+
+        <div className="dp-content max-w-7xl space-y-5">
+
+          {/* ── Header ── */}
+          <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <button onClick={() => navigate("/doctor/patients")}
+              className="flex items-center gap-1.5 text-sm font-medium transition-colors hover:opacity-70"
+              style={{ color: C.textSoft }}>
+              <ArrowLeft className="w-4 h-4" /> Retour aux patients
+            </button>
+
+            <div className="p-6" style={glass}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-2xl dp-sora"
+                      style={{
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                        boxShadow: "0 8px 24px rgba(74,157,135,0.30)",
+                      }}>
+                      {initials}
+                    </div>
+                    <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white"
+                      style={{ background: isOnline ? "#5aaa6e" : "rgba(30,60,50,0.25)" }} />
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-bold dp-sora" style={{ color: C.text }}>{fullName}</h1>
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      {patient.date_naissance && (
+                        <span className="text-xs px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(74,157,135,0.08)", color: C.textSoft }}>
+                          {age(patient.date_naissance)} ans
+                        </span>
+                      )}
+                      {patient.sexe && (
+                        <span className="text-xs px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(74,157,135,0.08)", color: C.textSoft }}>
+                          {patient.sexe}
+                        </span>
+                      )}
+                      {patient.maladies?.[0] && (
+                        <span className="text-xs px-2 py-0.5 rounded-full font-medium"
+                          style={{ background: "rgba(74,157,135,0.10)", color: C.primary, border: "1px solid rgba(74,157,135,0.22)" }}>
+                          {patient.maladies[0]}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={handleStartConversation}
-                  className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all">
-                  <MessageCircle className="w-4 h-4" /> Envoyer un message
-                </button>
-                <StatusBadge status={patient.status as any} size="md" />
+                <div className="flex items-center gap-2">
+                  <button onClick={handleStartConversation} className="dp-btn-primary">
+                    <MessageCircle className="w-4 h-4" /> Envoyer un message
+                  </button>
+                  <StatusBadge status={patient.status as any} size="md" />
+                </div>
               </div>
             </div>
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* ── Bannières consultation ── */}
-        {consultationDay !== null && (() => {
-          if (overdue) return (
-            <motion.div key="overdue" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-3 px-5 py-3.5 bg-red-500/10 border border-red-500/30 rounded-2xl text-red-600">
-              <Bell className="w-5 h-5 shrink-0 animate-pulse" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Consultation en retard !</p>
-                <p className="text-xs opacity-80 mt-0.5">La consultation du <strong>{JOURS[consultationDay].label}</strong> de cette semaine n'a pas encore été planifiée.</p>
-              </div>
-              <button onClick={openConsultForm} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white rounded-xl text-xs font-medium hover:bg-red-600 transition-colors shrink-0">
-                <Plus className="w-3.5 h-3.5" /> Planifier maintenant
-              </button>
-            </motion.div>
-          );
-          if (nextOccurrencePlanned && nextOccurrence) return (
-            <motion.div key="planned" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-3 px-5 py-3.5 bg-green-500/10 border border-green-500/30 rounded-2xl text-green-600">
-              <CheckCircle className="w-5 h-5 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">Consultation planifiée ✓</p>
-                <p className="text-xs opacity-80 mt-0.5">Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}</p>
-              </div>
-            </motion.div>
-          );
-          if (nextOccurrence) return (
-            <motion.div key="upcoming" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
-              className={`flex items-center gap-3 px-5 py-3.5 rounded-2xl border ${isToday ? "bg-orange-500/10 border-orange-500/30 text-orange-600" : "bg-blue-500/10 border-blue-500/30 text-blue-600"}`}>
-              <CalendarClock className="w-5 h-5 shrink-0" />
-              <div className="flex-1">
-                <p className="text-sm font-semibold">{isToday ? "Consultation prévue aujourd'hui !" : "Prochaine consultation à planifier"}</p>
-                <p className="text-xs opacity-80 mt-0.5">Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "— n'oubliez pas de planifier la séance." : `— ${format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}`}</p>
-              </div>
-              <button onClick={openConsultForm} className="flex items-center gap-1.5 px-3 py-1.5 bg-current/20 rounded-xl text-xs font-medium hover:bg-current/30 transition-colors shrink-0">
-                <Plus className="w-3.5 h-3.5" /> Planifier
-              </button>
-            </motion.div>
-          );
-          return null;
-        })()}
-
-        {/* ── Main grid ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-
-          {/* ── LEFT COLUMN ── */}
-          <div className="space-y-5">
-
-            {/* Infos personnelles */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
-              <Section title="Informations personnelles" icon={<User className="w-4 h-4" />}>
-                <div className="space-y-2 text-sm">
-                  {patient.telephone && <div className="flex items-center gap-2 text-muted-foreground"><Phone className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground">{patient.telephone}</span></div>}
-                  {patient.email && <div className="flex items-center gap-2 text-muted-foreground"><FileText className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground truncate">{patient.email}</span></div>}
-                  {patient.adresse && <div className="flex items-start gap-2 text-muted-foreground"><Home className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span className="text-foreground">{patient.adresse}</span></div>}
-                  {patient.date_naissance && <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-3.5 h-3.5 shrink-0" /><span className="text-foreground">{format(new Date(patient.date_naissance), "dd MMMM yyyy", { locale: fr })}</span></div>}
+          {/* ── Consultation banners ── */}
+          {consultationDay !== null && (() => {
+            if (overdue) return (
+              <motion.div key="overdue" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 px-5 py-3.5 rounded-2xl"
+                style={{ background: "rgba(192,80,74,0.10)", border: "1px solid rgba(192,80,74,0.30)" }}>
+                <Bell className="w-5 h-5 shrink-0 animate-pulse" style={{ color: C.muted }} />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold dp-sora" style={{ color: C.muted }}>Consultation en retard !</p>
+                  <p className="text-xs mt-0.5" style={{ color: "rgba(192,80,74,0.80)" }}>
+                    La consultation du <strong>{JOURS[consultationDay].label}</strong> de cette semaine n'a pas encore été planifiée.
+                  </p>
                 </div>
-              </Section>
-            </motion.div>
-
-            {/* Dossier médical */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
-              <Section title="Dossier médical" icon={<Stethoscope className="w-4 h-4" />}>
-                <div className="space-y-3 text-sm">
-                  {patient.maladies?.length > 0 && <div><p className="text-xs text-muted-foreground mb-1.5">Maladies</p><div className="flex flex-wrap gap-1">{patient.maladies.map((m, i) => <span key={i} className="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full border border-primary/20">{m}</span>)}</div></div>}
-                  {patient.antecedents && <div><p className="text-xs text-muted-foreground mb-1">Antécédents</p><p className="text-foreground text-xs leading-relaxed">{patient.antecedents}</p></div>}
-                  {patient.traitements?.length > 0 && <div><p className="text-xs text-muted-foreground mb-1.5">Traitements</p><div className="flex flex-wrap gap-1">{patient.traitements.map((t, i) => <span key={i} className="text-xs bg-muted text-muted-foreground px-2 py-0.5 rounded-full">{t}</span>)}</div></div>}
-                  {!patient.maladies?.length && !patient.antecedents && !patient.traitements?.length && <p className="text-xs text-muted-foreground">Aucune information renseignée</p>}
+                <button onClick={openConsultForm} className="dp-btn-danger shrink-0">
+                  <Plus className="w-3.5 h-3.5" /> Planifier maintenant
+                </button>
+              </motion.div>
+            );
+            if (nextOccurrencePlanned && nextOccurrence) return (
+              <motion.div key="planned" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 px-5 py-3.5 rounded-2xl"
+                style={{ background: "rgba(74,157,135,0.10)", border: "1px solid rgba(74,157,135,0.28)" }}>
+                <CheckCircle className="w-5 h-5 shrink-0" style={{ color: C.primary }} />
+                <div>
+                  <p className="text-sm font-semibold dp-sora" style={{ color: C.primaryDark }}>Consultation planifiée ✓</p>
+                  <p className="text-xs mt-0.5" style={{ color: C.textSoft }}>
+                    Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}
+                  </p>
                 </div>
-              </Section>
-            </motion.div>
+              </motion.div>
+            );
+            if (nextOccurrence) return (
+              <motion.div key="upcoming" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-3 px-5 py-3.5 rounded-2xl"
+                style={isToday
+                  ? { background: "rgba(212,132,58,0.10)", border: "1px solid rgba(212,132,58,0.28)" }
+                  : { background: "rgba(91,143,160,0.10)", border: "1px solid rgba(91,143,160,0.28)" }}>
+                <CalendarClock className="w-5 h-5 shrink-0" style={{ color: isToday ? "#d4843a" : C.secondary }} />
+                <div className="flex-1">
+                  <p className="text-sm font-semibold dp-sora" style={{ color: isToday ? "#d4843a" : C.secondary }}>
+                    {isToday ? "Consultation prévue aujourd'hui !" : "Prochaine consultation à planifier"}
+                  </p>
+                  <p className="text-xs mt-0.5" style={{ color: C.textSoft }}>
+                    Le <strong>{JOURS[consultationDay].label}</strong> {isToday ? "— n'oubliez pas de planifier la séance." : `— ${format(nextOccurrence, "dd MMMM yyyy", { locale: fr })}`}
+                  </p>
+                </div>
+                <button onClick={openConsultForm} className="dp-btn-ghost shrink-0">
+                  <Plus className="w-3.5 h-3.5" /> Planifier
+                </button>
+              </motion.div>
+            );
+            return null;
+          })()}
 
-            {/* Proches */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
-              <Section title={`Proches (${proches.length})`} icon={<Users className="w-4 h-4" />}>
-                {proches.length === 0 ? <p className="text-xs text-muted-foreground">Aucun proche lié</p> : (
-                  <div className="space-y-2">
-                    {proches.map((p) => (
-                      <div key={p.proche_id} className="flex items-center justify-between gap-2 p-2 rounded-xl bg-muted/50">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="w-7 h-7 rounded-full bg-violet-500/10 flex items-center justify-center text-violet-600 text-xs font-semibold shrink-0">
-                            {`${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?"}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="text-xs font-medium text-foreground truncate">{[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}</p>
-                            {p.telephone && <p className="text-[10px] text-muted-foreground">{p.telephone}</p>}
-                          </div>
-                        </div>
-                        <button onClick={() => handleMessageProche(p.proche_id)} className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors shrink-0">
-                          <MessageCircle className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
-            </motion.div>
+          {/* ── Main grid ── */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-            {/* ── ANALYSES MÉDICALES ── */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.17 }}>
-              <Section
-                title={`Analyses médicales${newSubmissions > 0 ? ` · ${newSubmissions} résultat(s)` : ""}`}
-                icon={<FlaskConical className="w-4 h-4" />}
-                action={
-                  <button onClick={() => setShowAnalyseForm(v => !v)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all">
-                    {showAnalyseForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                    {showAnalyseForm ? "Annuler" : "Demander"}
-                  </button>
-                }
-              >
-                {showAnalyseForm && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                    className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Type d'analyse *</label>
-                      <select value={analyseForm.type}
-                        onChange={(e) => setAnalyseForm(p => ({ ...p, type: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all">
-                        <option value="">Choisir...</option>
-                        {ANALYSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Instructions (optionnel)</label>
-                      <textarea
-                        placeholder="Ex : À jeun depuis 12h, apporter les résultats précédents..."
-                        value={analyseForm.note_medecin}
-                        onChange={(e) => setAnalyseForm(p => ({ ...p, note_medecin: e.target.value }))}
-                        rows={3}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all resize-none" />
-                    </div>
-                    <button onClick={handleDemanderAnalyse}
-                      disabled={analyseLoading || !analyseForm.type}
-                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
-                      {analyseLoading
-                        ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</>
-                        : <><FlaskConical className="w-3.5 h-3.5" /> Envoyer la demande</>}
-                    </button>
-                  </motion.div>
-                )}
+            {/* ── LEFT COLUMN ── */}
+            <div className="space-y-4">
 
-                {analyses.length === 0 ? (
-                  <p className="text-xs text-muted-foreground">Aucune analyse demandée.</p>
-                ) : (
-                  <div className="space-y-2">
-                    {analyses.map((a) => (
-                      <div key={a.id} className={`p-3 rounded-xl border space-y-2 ${
-                        a.statut === "soumise" ? "border-blue-500/30 bg-blue-500/5" : "border-border bg-muted/30"
-                      }`}>
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-foreground">{a.type}</p>
-                          <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full border ${
-                            a.statut === "demandee" ? "bg-yellow-500/10 text-yellow-600 border-yellow-500/20" :
-                            a.statut === "soumise"  ? "bg-blue-500/10 text-blue-600 border-blue-500/20" :
-                                                      "bg-green-500/10 text-green-600 border-green-500/20"
-                          }`}>
-                            {a.statut === "demandee" ? "En attente" : a.statut === "soumise" ? "Résultat reçu" : "Consultée"}
-                          </span>
-                        </div>
-
-                        {a.note_medecin && (
-                          <p className="text-[11px] text-muted-foreground italic leading-relaxed">{a.note_medecin}</p>
-                        )}
-
-                        <p className="text-[10px] text-muted-foreground">
-                          {format(new Date(a.created_at), "dd MMM yyyy", { locale: fr })}
-                          {a.submitted_at && ` · Soumis ${formatDistanceToNow(new Date(a.submitted_at), { addSuffix: true, locale: fr })}`}
-                        </p>
-
-                        {/* ── Statut: soumise — show file + mark as viewed ── */}
-                        {a.statut === "soumise" && (
-                          <div className="flex items-center gap-2 flex-wrap">
-                            {a.file_url && (
-                              <button
-                                onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
-                                disabled={openingFile === a.id}
-                                className="flex items-center gap-1 text-xs text-blue-600 hover:underline disabled:opacity-60"
-                              >
-                                {openingFile === a.id
-                                  ? <Loader className="w-3 h-3 animate-spin" />
-                                  : <FileText className="w-3 h-3" />}
-                                {a.file_name || "Voir le document"}
-                              </button>
-                            )}
-                            <button
-                              onClick={() => handleMarquerVue(a.id)}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all"
-                            >
-                              <CheckCircle className="w-3 h-3" /> Marquer comme vue
-                            </button>
-                          </div>
-                        )}
-
-                        {/* ── Statut: vue — show file link only ── */}
-                        {a.statut === "vue" && a.file_url && (
-                          <button
-                            onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
-                            disabled={openingFile === a.id}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary transition-colors disabled:opacity-60"
-                          >
-                            {openingFile === a.id
-                              ? <Loader className="w-3 h-3 animate-spin" />
-                              : <FileText className="w-3 h-3" />}
-                            {a.file_name || "Voir le document"}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
-            </motion.div>
-
-            {/* Consultation hebdomadaire */}
-            <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 }}>
-              <Section title="Consultation hebdomadaire" icon={<RefreshCw className="w-4 h-4" />}
-                action={
-                  <button onClick={() => { setEditingConsultDay(v => !v); setSelectedDay(consultationDay); }}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-muted hover:bg-muted/80 text-muted-foreground transition-all">
-                    {editingConsultDay ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                    {editingConsultDay ? "Annuler" : (consultationDay !== null ? "Modifier" : "Définir")}
-                  </button>
-                }
-              >
-                {!editingConsultDay && (
-                  consultationDay !== null ? (
-                    <div className="space-y-2">
-                      <div className="flex items-center gap-2 p-3 rounded-xl bg-primary/5 border border-primary/20">
-                        <Calendar className="w-4 h-4 text-primary shrink-0" />
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">Chaque <span className="text-primary">{JOURS[consultationDay].label}</span></p>
-                          <p className="text-xs text-muted-foreground mt-0.5">Prochain : {nextOccurrence ? (isToday ? "Aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })) : "—"}</p>
-                        </div>
-                      </div>
-                      {overdue && <div className="flex items-center gap-1.5 text-xs text-red-500 font-medium"><AlertTriangle className="w-3.5 h-3.5" />Consultation de cette semaine non planifiée</div>}
-                    </div>
-                  ) : <p className="text-xs text-muted-foreground">Aucun jour récurrent défini. Cliquez sur <strong>Définir</strong> pour en choisir un.</p>
-                )}
-                {editingConsultDay && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
-                    <p className="text-xs text-muted-foreground">Choisissez le jour de consultation :</p>
-                    <div className="grid grid-cols-7 gap-1">
-                      {JOURS.map((j, i) => (
-                        <button key={i} onClick={() => setSelectedDay(i)}
-                          className={`py-2 rounded-xl text-xs font-medium transition-all ${selectedDay === i ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}>
-                          {j.short}
-                        </button>
-                      ))}
-                    </div>
-                    {selectedDay !== null && (
-                      <p className="text-xs text-muted-foreground">Prochain <strong className="text-foreground">{JOURS[selectedDay].label}</strong> : {format(getNextOccurrence(selectedDay), "dd MMMM yyyy", { locale: fr })}</p>
-                    )}
-                    <button onClick={handleSaveConsultationDay} disabled={savingConsultDay || selectedDay === null}
-                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
-                      {savingConsultDay ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Sauvegarde...</> : <><Check className="w-3.5 h-3.5" /> Confirmer</>}
-                    </button>
-                  </motion.div>
-                )}
-              </Section>
-            </motion.div>
-
-            {/* Consultations vidéo */}
-            <motion.div ref={consultSectionRef} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
-              <Section title="Consultations vidéo" icon={<Video className="w-4 h-4" />}
-                action={
-                  <button onClick={() => setShowConsultForm(v => !v)}
-                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:brightness-110 transition-all">
-                    {showConsultForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
-                    {showConsultForm ? "Annuler" : "Planifier"}
-                  </button>
-                }
-              >
-                {showConsultForm && (
-                  <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-4 p-4 bg-muted/40 border border-border rounded-xl space-y-3">
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Lien Zoom *</label>
-                      <input type="url" placeholder="https://zoom.us/j/..." value={consultForm.zoom_link}
-                        onChange={e => setConsultForm(p => ({ ...p, zoom_link: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Date et heure *</label>
-                      <input type="datetime-local" value={consultForm.scheduled_at}
-                        min={new Date().toISOString().slice(0, 16)}
-                        onChange={e => setConsultForm(p => ({ ...p, scheduled_at: e.target.value }))}
-                        className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all" />
-                    </div>
-                    <div>
-                      <label className="text-xs text-muted-foreground mb-1 block">Notes (optionnel)</label>
-                      <textarea placeholder="Instructions pour le patient..." value={consultForm.notes}
-                        onChange={e => setConsultForm(p => ({ ...p, notes: e.target.value }))}
-                        rows={2} className="w-full bg-card border border-border rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-primary/50 transition-all resize-none" />
-                    </div>
-                    <button onClick={handlePlanifierConsultation}
-                      disabled={consultLoading || !consultForm.zoom_link || !consultForm.scheduled_at}
-                      className="w-full flex items-center justify-center gap-2 bg-primary text-primary-foreground py-2 rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
-                      {consultLoading ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</> : <><Calendar className="w-3.5 h-3.5" /> Confirmer et notifier le patient</>}
-                    </button>
-                  </motion.div>
-                )}
-                {consultations.length === 0 ? <p className="text-xs text-muted-foreground">Aucune consultation planifiée.</p> : (
-                  <div className="space-y-2">
-                    {consultations.map((c) => (
-                      <div key={c.id} className="p-3 rounded-xl border border-border bg-muted/30 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <Calendar className="w-3 h-3" />
-                            <span className="font-medium text-foreground">{format(new Date(c.scheduled_at), "dd MMM yyyy · HH:mm", { locale: fr })}</span>
-                          </div>
-                          {consultationStatusBadge(c.status)}
-                        </div>
-                        {c.notes && <p className="text-xs text-muted-foreground italic">{c.notes}</p>}
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <a href={c.zoom_link} target="_blank" rel="noopener noreferrer"
-                            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-600 hover:bg-blue-500/20 transition-all">
-                            <Video className="w-3 h-3" /> Rejoindre <ExternalLink className="w-2.5 h-2.5" />
-                          </a>
-                          {c.status === "planifiee" && (
-                            <>
-                              <button onClick={() => handleTerminerConsultation(c.id)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-green-500/10 text-green-600 hover:bg-green-500/20 transition-all">
-                                <Check className="w-3 h-3" /> Terminée
-                              </button>
-                              <button onClick={() => handleAnnulerConsultation(c.id)}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-red-500/10 text-red-600 hover:bg-red-500/20 transition-all">
-                                <X className="w-3 h-3" /> Annuler
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </Section>
-            </motion.div>
-          </div>
-
-          {/* ── RIGHT COLUMN ── */}
-          <div className="lg:col-span-2 space-y-5">
-
-            {/* Vitals temps réel */}
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
-              <div className="bg-card border border-border rounded-2xl p-5 shadow-sm space-y-5">
-                <div className="flex items-center justify-between flex-wrap gap-3">
-                  <div className="flex items-center gap-2">
-                    <Shield className="w-4 h-4 text-primary" />
-                    <h3 className="text-sm font-semibold text-foreground">Constantes vitales en temps réel</h3>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {lastUpdate && <span className="text-xs text-muted-foreground">Mise à jour : {formatTime(lastUpdate)}</span>}
-                    {device ? (
-                      <div className="flex items-center gap-1.5 text-xs">
-                        {isOnline
-                          ? <><Wifi className="w-3.5 h-3.5 text-green-500" /><span className="text-green-500">En ligne</span></>
-                          : <><WifiOff className="w-3.5 h-3.5 text-muted-foreground" /><span className="text-muted-foreground">Hors ligne</span></>}
-                        {device.dernier_signal && <span className="text-muted-foreground ml-1">· {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}</span>}
-                      </div>
-                    ) : <span className="text-xs text-muted-foreground">Aucun appareil</span>}
-                    {lastUpdate && (
-                      <div className="flex items-center gap-1.5 text-xs text-green-500">
-                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                        Temps réel
+              {/* Infos personnelles */}
+              <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.05 }}>
+                <Section title="Informations personnelles" icon={<User className="w-3.5 h-3.5" />}>
+                  <div className="space-y-2.5 text-sm">
+                    {patient.telephone && (
+                      <div className="flex items-center gap-2.5">
+                        <Phone className="w-3.5 h-3.5 shrink-0" style={{ color: C.primary }} />
+                        <span style={{ color: C.text }}>{patient.telephone}</span>
                       </div>
                     )}
-                  </div>
-                </div>
-
-                {!deviceId ? (
-                  <div className="text-center py-8 text-muted-foreground text-sm">
-                    <Activity className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                    Aucun capteur associé à ce patient
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                      <VitalCard icon="❤️" label="Fréq. Cardiaque"
-                        value={latestVital?.bpm?.toString() ?? "—"} unit="BPM"
-                        status={getBpmStatus(latestVital?.bpm ?? null)} delay={0.1} borderColor="border-l-primary">
-                        <div className="mt-2 h-1 rounded-full bg-primary/10">
-                          <div className="h-full rounded-full bg-primary animate-pulse"
-                            style={{ width: `${Math.min(((latestVital?.bpm ?? 0) / 200) * 100, 100)}%` }} />
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">Normal : 60-100 BPM</p>
-                      </VitalCard>
-                      <VitalCard icon="🩸" label="SpO2"
-                        value={latestVital?.spo2?.toString() ?? "—"} unit="%"
-                        status={getSpo2Status(latestVital?.spo2 ?? null)} delay={0.15} borderColor="border-l-safe">
-                        <p className="text-xs text-muted-foreground mt-2">Normal : 95-100%</p>
-                      </VitalCard>
-                      <VitalCard icon="🌡️" label="Température"
-                        value={latestVital?.temperature?.toFixed(1) ?? "—"} unit="°C"
-                        status={getTempStatus(latestVital?.temperature ?? null)} delay={0.2} borderColor="border-l-accent">
-                        <p className="text-xs text-muted-foreground mt-2">Normal : 36.1-37.2°C</p>
-                      </VitalCard>
-                      <VitalCard
-                        icon={latestVital?.chute ? "🚨" : "✅"}
-                        label="Détection Chute"
-                        value={latestVital?.chute ? "ALERTE" : "Normal"} unit=""
-                        status={latestVital?.chute ? "critical" : "safe"} delay={0.25}
-                        borderColor={latestVital?.chute ? "border-l-destructive" : "border-l-safe"}>
-                        <p className="text-xs text-muted-foreground mt-2">
-                          {latestVital?.chute ? "⚠️ Chute détectée !" : "Aucune chute détectée"}
-                        </p>
-                      </VitalCard>
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-4 text-xs text-muted-foreground">
-                      {latestVital?.niveau_batterie != null && (
-                        <div className="flex items-center gap-1.5">
-                          <Battery className="w-3.5 h-3.5" />
-                          <span className={batteryColor(latestVital.niveau_batterie)}>Batterie : {latestVital.niveau_batterie}%</span>
-                        </div>
-                      )}
-                      {latestVital?.latitude && latestVital?.longitude && (
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="w-3 h-3" />
-                          <a href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`}
-                            target="_blank" rel="noopener noreferrer" className="hover:text-primary transition-colors">
-                            {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
-                          </a>
-                        </div>
-                      )}
-                    </div>
-
-                    {vitalsHistory.length === 0 ? (
-                      <div className="text-center py-10 text-muted-foreground text-sm">
-                        <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
-                        En attente des premières mesures...
+                    {patient.email && (
+                      <div className="flex items-center gap-2.5">
+                        <FileText className="w-3.5 h-3.5 shrink-0" style={{ color: C.primary }} />
+                        <span className="truncate" style={{ color: C.text }}>{patient.email}</span>
                       </div>
-                    ) : (
-                      <>
-                        <div>
-                          <div className="flex items-center justify-between mb-3">
-                            <h4 className="text-xs font-semibold text-foreground">Fréquence Cardiaque — 20 dernières mesures</h4>
-                            <RefreshCw className="w-3.5 h-3.5 text-muted-foreground animate-spin" style={{ animationDuration: "3s" }} />
-                          </div>
-                          <ResponsiveContainer width="100%" height={180}>
-                            <LineChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <YAxis domain={[40, 160]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                              <Line type="monotone" dataKey="BPM" stroke="hsl(var(--primary))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs font-semibold text-foreground mb-3">SpO2 — 20 dernières mesures</h4>
-                          <ResponsiveContainer width="100%" height={180}>
-                            <LineChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <YAxis domain={[80, 100]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                              <Line type="monotone" dataKey="SpO2" stroke="hsl(var(--safe))" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-
-                        <div>
-                          <h4 className="text-xs font-semibold text-foreground mb-3">Température — 20 dernières mesures</h4>
-                          <ResponsiveContainer width="100%" height={180}>
-                            <LineChart data={chartData}>
-                              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                              <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <YAxis domain={[35, 41]} tick={{ fontSize: 10 }} stroke="hsl(var(--muted-foreground))" />
-                              <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: "12px" }} />
-                              <ReferenceLine y={37.5} stroke="#f97316" strokeDasharray="4 2" strokeOpacity={0.5} />
-                              <Line type="monotone" dataKey="Température" stroke="#f97316" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
-                            </LineChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </>
                     )}
-                  </>
-                )}
-              </div>
-            </motion.div>
-
-            {/* Alertes */}
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
-              <Section title={`Alertes récentes (${alerts.length})`} icon={<AlertTriangle className="w-4 h-4" />}>
-                {alerts.length === 0 ? <p className="text-xs text-muted-foreground">Aucune alerte récente</p> : (
-                  <div className="space-y-2">
-                    {alerts.map(a => (
-                      <div key={a.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs ${severityColor[a.severity] || "text-muted-foreground bg-muted border-border"}`}>
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="font-medium">{a.type.replace(/_/g, " ")}</p>
-                          <p className="opacity-80 mt-0.5">{a.message}</p>
-                        </div>
-                        <div className="flex flex-col items-end gap-1 shrink-0">
-                          <span className="opacity-70">{formatDistanceToNow(new Date(a.created_at), { addSuffix: true, locale: fr })}</span>
-                          {!a.resolved && <span className="px-1.5 py-0.5 rounded-full bg-current/10 font-medium">Non résolu</span>}
-                        </div>
+                    {patient.adresse && (
+                      <div className="flex items-start gap-2.5">
+                        <Home className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: C.primary }} />
+                        <span style={{ color: C.text }}>{patient.adresse}</span>
                       </div>
-                    ))}
-                    <button onClick={() => navigate("/doctor/alerts")} className="flex items-center gap-1 text-xs text-primary hover:underline mt-1">
-                      Voir toutes les alertes <ChevronRight className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
-              </Section>
-            </motion.div>
-
-            {/* Anomalies IA */}
-            {anomalies.length > 0 && (
-              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
-                <Section title="Anomalies détectées par IA" icon={<Zap className="w-4 h-4" />}>
-                  <div className="space-y-2">
-                    {anomalies.map(a => (
-                      <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl bg-muted/50 text-xs">
-                        <div>
-                          <p className="font-medium text-foreground">{a.type_anomalie.replace(/_/g, " ")}</p>
-                          <p className="text-muted-foreground mt-0.5">{formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}</p>
-                        </div>
-                        {a.score_confiance != null && (
-                          <div className="flex items-center gap-1.5">
-                            <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
-                              <div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(a.score_confiance * 40, 100)}%` }} />
-                            </div>
-                            <span className="text-muted-foreground">{a.score_confiance.toFixed(2)}</span>
-                          </div>
-                        )}
+                    )}
+                    {patient.date_naissance && (
+                      <div className="flex items-center gap-2.5">
+                        <Clock className="w-3.5 h-3.5 shrink-0" style={{ color: C.primary }} />
+                        <span style={{ color: C.text }}>{format(new Date(patient.date_naissance), "dd MMMM yyyy", { locale: fr })}</span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </Section>
               </motion.div>
-            )}
 
-            {/* Notes cliniques */}
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-              <Section title="Notes cliniques" icon={<FileText className="w-4 h-4" />}>
-                <textarea value={notes} onChange={e => setNotes(e.target.value)}
-                  placeholder="Ajouter des notes cliniques..."
-                  className="w-full bg-muted rounded-xl p-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/20 min-h-[120px] resize-none" />
-                <div className="flex items-center justify-between mt-3">
-                  {notesSaved && <span className="flex items-center gap-1 text-xs text-green-500"><CheckCircle className="w-3.5 h-3.5" /> Sauvegardé</span>}
-                  <button onClick={handleSaveNotes} disabled={savingNotes}
-                    className="ml-auto flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50">
-                    {savingNotes ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                    Sauvegarder
-                  </button>
+              {/* Dossier médical */}
+              <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.10 }}>
+                <Section title="Dossier médical" icon={<Stethoscope className="w-3.5 h-3.5" />}>
+                  <div className="space-y-3 text-sm">
+                    {patient.maladies?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: C.textSoft }}>Maladies</p>
+                        <div className="flex flex-wrap gap-1">
+                          {patient.maladies.map((m, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 rounded-full font-medium"
+                              style={{ background: "rgba(74,157,135,0.10)", color: C.primary, border: "1px solid rgba(74,157,135,0.22)" }}>
+                              {m}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {patient.antecedents && (
+                      <div>
+                        <p className="text-xs font-semibold mb-1 uppercase tracking-wide" style={{ color: C.textSoft }}>Antécédents</p>
+                        <p className="text-xs leading-relaxed" style={{ color: C.text }}>{patient.antecedents}</p>
+                      </div>
+                    )}
+                    {patient.traitements?.length > 0 && (
+                      <div>
+                        <p className="text-xs font-semibold mb-1.5 uppercase tracking-wide" style={{ color: C.textSoft }}>Traitements</p>
+                        <div className="flex flex-wrap gap-1">
+                          {patient.traitements.map((t, i) => (
+                            <span key={i} className="text-xs px-2 py-0.5 rounded-full"
+                              style={{ background: "rgba(30,60,50,0.06)", color: C.textSoft, border: "1px solid rgba(30,60,50,0.10)" }}>
+                              {t}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!patient.maladies?.length && !patient.antecedents && !patient.traitements?.length && (
+                      <p className="text-xs" style={{ color: C.textSoft }}>Aucune information renseignée</p>
+                    )}
+                  </div>
+                </Section>
+              </motion.div>
+
+              {/* Proches */}
+              <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.15 }}>
+                <Section title={`Proches (${proches.length})`} icon={<Users className="w-3.5 h-3.5" />}>
+                  {proches.length === 0
+                    ? <p className="text-xs" style={{ color: C.textSoft }}>Aucun proche lié</p>
+                    : (
+                      <div className="space-y-2">
+                        {proches.map((p) => (
+                          <div key={p.proche_id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl"
+                            style={{ background: "rgba(74,157,135,0.05)", border: "1px solid rgba(74,157,135,0.12)" }}>
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold dp-sora shrink-0"
+                                style={{ background: `linear-gradient(135deg, ${C.secondary}, ${C.primary})`, color: "#fff" }}>
+                                {`${p.prenom?.[0] || ""}${p.nom?.[0] || ""}`.toUpperCase() || "?"}
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-xs font-semibold dp-sora truncate" style={{ color: C.text }}>
+                                  {[p.prenom, p.nom].filter(Boolean).join(" ") || "—"}
+                                </p>
+                                {p.telephone && <p className="text-[10px]" style={{ color: C.textSoft }}>{p.telephone}</p>}
+                              </div>
+                            </div>
+                            <button onClick={() => handleMessageProche(p.proche_id)}
+                              className="p-1.5 rounded-lg transition-colors hover:scale-110"
+                              style={{ color: C.primary }}>
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </Section>
+              </motion.div>
+
+              {/* Analyses médicales */}
+              <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.17 }}>
+                <Section
+                  title={`Analyses médicales${newSubmissions > 0 ? ` · ${newSubmissions} résultat(s)` : ""}`}
+                  icon={<FlaskConical className="w-3.5 h-3.5" />}
+                  action={
+                    <button onClick={() => setShowAnalyseForm(v => !v)} className="dp-btn-primary" style={{ padding: "5px 10px", fontSize: "11px" }}>
+                      {showAnalyseForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                      {showAnalyseForm ? "Annuler" : "Demander"}
+                    </button>
+                  }
+                >
+                  {showAnalyseForm && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className="mb-4 p-4 rounded-2xl space-y-3"
+                      style={{ background: "rgba(74,157,135,0.05)", border: "1px solid rgba(74,157,135,0.14)" }}>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: C.textSoft }}>Type d'analyse *</label>
+                        <select value={analyseForm.type}
+                          onChange={(e) => setAnalyseForm(p => ({ ...p, type: e.target.value }))}
+                          className="dp-input">
+                          <option value="">Choisir...</option>
+                          {ANALYSE_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: C.textSoft }}>Instructions (optionnel)</label>
+                        <textarea
+                          placeholder="Ex : À jeun depuis 12h, apporter les résultats précédents..."
+                          value={analyseForm.note_medecin}
+                          onChange={(e) => setAnalyseForm(p => ({ ...p, note_medecin: e.target.value }))}
+                          rows={3} className="dp-input" style={{ resize: "none" }} />
+                      </div>
+                      <button onClick={handleDemanderAnalyse} disabled={analyseLoading || !analyseForm.type}
+                        className="dp-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                        {analyseLoading
+                          ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</>
+                          : <><FlaskConical className="w-3.5 h-3.5" /> Envoyer la demande</>}
+                      </button>
+                    </motion.div>
+                  )}
+
+                  {analyses.length === 0 ? (
+                    <p className="text-xs" style={{ color: C.textSoft }}>Aucune analyse demandée.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {analyses.map((a) => (
+                        <div key={a.id} className="p-3 rounded-2xl space-y-2"
+                          style={a.statut === "soumise"
+                            ? { background: "rgba(91,143,160,0.08)", border: "1px solid rgba(91,143,160,0.25)" }
+                            : { background: "rgba(74,157,135,0.04)", border: "1px solid rgba(74,157,135,0.14)" }}>
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-semibold dp-sora" style={{ color: C.text }}>{a.type}</p>
+                            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                              style={
+                                a.statut === "demandee" ? { background: "rgba(212,168,67,0.12)", color: C.gold, border: "1px solid rgba(212,168,67,0.28)" } :
+                                a.statut === "soumise"  ? { background: "rgba(91,143,160,0.12)", color: C.secondary, border: "1px solid rgba(91,143,160,0.28)" } :
+                                                          { background: "rgba(74,157,135,0.10)", color: C.primaryDark, border: "1px solid rgba(74,157,135,0.25)" }
+                              }>
+                              {a.statut === "demandee" ? "En attente" : a.statut === "soumise" ? "Résultat reçu" : "Consultée"}
+                            </span>
+                          </div>
+                          {a.note_medecin && <p className="text-[11px] italic leading-relaxed" style={{ color: C.textSoft }}>{a.note_medecin}</p>}
+                          <p className="text-[10px]" style={{ color: C.textSoft }}>
+                            {format(new Date(a.created_at), "dd MMM yyyy", { locale: fr })}
+                            {a.submitted_at && ` · Soumis ${formatDistanceToNow(new Date(a.submitted_at), { addSuffix: true, locale: fr })}`}
+                          </p>
+                          {a.statut === "soumise" && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {a.file_url && (
+                                <button onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
+                                  disabled={openingFile === a.id}
+                                  className="flex items-center gap-1 text-xs font-medium hover:underline disabled:opacity-60"
+                                  style={{ color: C.secondary }}>
+                                  {openingFile === a.id ? <Loader className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                                  {a.file_name || "Voir le document"}
+                                </button>
+                              )}
+                              <button onClick={() => handleMarquerVue(a.id)} className="dp-btn-ghost" style={{ fontSize: "11px", padding: "4px 10px" }}>
+                                <CheckCircle className="w-3 h-3" /> Marquer comme vue
+                              </button>
+                            </div>
+                          )}
+                          {a.statut === "vue" && a.file_url && (
+                            <button onClick={() => handleOpenAnalyse(a.id, a.file_url!, a.file_name || "document")}
+                              disabled={openingFile === a.id}
+                              className="flex items-center gap-1 text-xs transition-colors disabled:opacity-60"
+                              style={{ color: C.textSoft }}>
+                              {openingFile === a.id ? <Loader className="w-3 h-3 animate-spin" /> : <FileText className="w-3 h-3" />}
+                              {a.file_name || "Voir le document"}
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Section>
+              </motion.div>
+
+              {/* Consultation hebdomadaire */}
+              <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.18 }}>
+                <Section title="Consultation hebdomadaire" icon={<RefreshCw className="w-3.5 h-3.5" />}
+                  action={
+                    <button onClick={() => { setEditingConsultDay(v => !v); setSelectedDay(consultationDay); }}
+                      className="dp-btn-ghost" style={{ fontSize: "11px", padding: "4px 10px" }}>
+                      {editingConsultDay ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                      {editingConsultDay ? "Annuler" : (consultationDay !== null ? "Modifier" : "Définir")}
+                    </button>
+                  }
+                >
+                  {!editingConsultDay && (
+                    consultationDay !== null ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2.5 p-3 rounded-xl"
+                          style={{ background: "rgba(74,157,135,0.07)", border: "1px solid rgba(74,157,135,0.18)" }}>
+                          <Calendar className="w-4 h-4 shrink-0" style={{ color: C.primary }} />
+                          <div>
+                            <p className="text-sm font-semibold dp-sora" style={{ color: C.text }}>
+                              Chaque <span style={{ color: C.primary }}>{JOURS[consultationDay].label}</span>
+                            </p>
+                            <p className="text-xs mt-0.5" style={{ color: C.textSoft }}>
+                              Prochain : {nextOccurrence ? (isToday ? "Aujourd'hui" : format(nextOccurrence, "dd MMMM yyyy", { locale: fr })) : "—"}
+                            </p>
+                          </div>
+                        </div>
+                        {overdue && (
+                          <div className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: C.muted }}>
+                            <AlertTriangle className="w-3.5 h-3.5" />Consultation de cette semaine non planifiée
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs" style={{ color: C.textSoft }}>
+                        Aucun jour récurrent défini. Cliquez sur <strong>Définir</strong> pour en choisir un.
+                      </p>
+                    )
+                  )}
+                  {editingConsultDay && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-3">
+                      <p className="text-xs" style={{ color: C.textSoft }}>Choisissez le jour de consultation :</p>
+                      <div className="grid grid-cols-7 gap-1">
+                        {JOURS.map((j, i) => (
+                          <button key={i} onClick={() => setSelectedDay(i)}
+                            className="py-2 rounded-xl text-xs font-semibold transition-all dp-sora"
+                            style={selectedDay === i
+                              ? { background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`, color: "#fff", boxShadow: "0 4px 12px rgba(74,157,135,0.28)" }
+                              : { background: "rgba(74,157,135,0.07)", color: C.textSoft, border: "1px solid rgba(74,157,135,0.14)" }}>
+                            {j.short}
+                          </button>
+                        ))}
+                      </div>
+                      {selectedDay !== null && (
+                        <p className="text-xs" style={{ color: C.textSoft }}>
+                          Prochain <strong style={{ color: C.text }}>{JOURS[selectedDay].label}</strong> : {format(getNextOccurrence(selectedDay), "dd MMMM yyyy", { locale: fr })}
+                        </p>
+                      )}
+                      <button onClick={handleSaveConsultationDay} disabled={savingConsultDay || selectedDay === null}
+                        className="dp-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                        {savingConsultDay ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Sauvegarde...</> : <><Check className="w-3.5 h-3.5" /> Confirmer</>}
+                      </button>
+                    </motion.div>
+                  )}
+                </Section>
+              </motion.div>
+
+              {/* Consultations vidéo */}
+              <motion.div ref={consultSectionRef} initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.20 }}>
+                <Section title="Consultations vidéo" icon={<Video className="w-3.5 h-3.5" />}
+                  action={
+                    <button onClick={() => setShowConsultForm(v => !v)} className="dp-btn-primary" style={{ padding: "5px 10px", fontSize: "11px" }}>
+                      {showConsultForm ? <X className="w-3 h-3" /> : <Plus className="w-3 h-3" />}
+                      {showConsultForm ? "Annuler" : "Planifier"}
+                    </button>
+                  }
+                >
+                  {showConsultForm && (
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                      className="mb-4 p-4 rounded-2xl space-y-3"
+                      style={{ background: "rgba(74,157,135,0.05)", border: "1px solid rgba(74,157,135,0.14)" }}>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: C.textSoft }}>Lien Zoom *</label>
+                        <input type="url" placeholder="https://zoom.us/j/..." value={consultForm.zoom_link}
+                          onChange={e => setConsultForm(p => ({ ...p, zoom_link: e.target.value }))}
+                          className="dp-input" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: C.textSoft }}>Date et heure *</label>
+                        <input type="datetime-local" value={consultForm.scheduled_at}
+                          min={new Date().toISOString().slice(0, 16)}
+                          onChange={e => setConsultForm(p => ({ ...p, scheduled_at: e.target.value }))}
+                          className="dp-input" />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold mb-1 block" style={{ color: C.textSoft }}>Notes (optionnel)</label>
+                        <textarea placeholder="Instructions pour le patient..." value={consultForm.notes}
+                          onChange={e => setConsultForm(p => ({ ...p, notes: e.target.value }))}
+                          rows={2} className="dp-input" style={{ resize: "none" }} />
+                      </div>
+                      <button onClick={handlePlanifierConsultation}
+                        disabled={consultLoading || !consultForm.zoom_link || !consultForm.scheduled_at}
+                        className="dp-btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+                        {consultLoading ? <><Loader className="w-3.5 h-3.5 animate-spin" /> Envoi...</> : <><Calendar className="w-3.5 h-3.5" /> Confirmer et notifier le patient</>}
+                      </button>
+                    </motion.div>
+                  )}
+
+                  {consultations.length === 0
+                    ? <p className="text-xs" style={{ color: C.textSoft }}>Aucune consultation planifiée.</p>
+                    : (
+                      <div className="space-y-2">
+                        {consultations.map((c) => (
+                          <div key={c.id} className="p-3 rounded-2xl space-y-2"
+                            style={{ background: "rgba(74,157,135,0.04)", border: "1px solid rgba(74,157,135,0.14)" }}>
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="flex items-center gap-1.5 text-xs" style={{ color: C.textSoft }}>
+                                <Calendar className="w-3 h-3" />
+                                <span className="font-semibold dp-sora" style={{ color: C.text }}>
+                                  {format(new Date(c.scheduled_at), "dd MMM yyyy · HH:mm", { locale: fr })}
+                                </span>
+                              </div>
+                              {consultationStatusBadge(c.status)}
+                            </div>
+                            {c.notes && <p className="text-xs italic" style={{ color: C.textSoft }}>{c.notes}</p>}
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <a href={c.zoom_link} target="_blank" rel="noopener noreferrer"
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold transition-all hover:scale-105"
+                                style={{ background: "rgba(91,143,160,0.10)", color: C.secondary, border: "1px solid rgba(91,143,160,0.25)" }}>
+                                <Video className="w-3 h-3" /> Rejoindre <ExternalLink className="w-2.5 h-2.5" />
+                              </a>
+                              {c.status === "planifiee" && (
+                                <>
+                                  <button onClick={() => handleTerminerConsultation(c.id)} className="dp-btn-ghost" style={{ fontSize: "11px", padding: "4px 10px" }}>
+                                    <Check className="w-3 h-3" /> Terminée
+                                  </button>
+                                  <button onClick={() => handleAnnulerConsultation(c.id)} className="dp-btn-danger" style={{ fontSize: "11px", padding: "4px 10px" }}>
+                                    <X className="w-3 h-3" /> Annuler
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                </Section>
+              </motion.div>
+            </div>
+
+            {/* ── RIGHT COLUMN ── */}
+            <div className="lg:col-span-2 space-y-4">
+
+              {/* Vitals temps réel */}
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+                <div className="p-5 space-y-5" style={glass}>
+                  <div className="flex items-center justify-between flex-wrap gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl flex items-center justify-center"
+                        style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`, boxShadow: "0 4px 12px rgba(74,157,135,0.28)" }}>
+                        <Shield className="w-4 h-4 text-white" />
+                      </div>
+                      <h3 className="text-sm font-semibold dp-sora" style={{ color: C.text }}>Constantes vitales en temps réel</h3>
+                    </div>
+                    <div className="flex items-center gap-3 flex-wrap">
+                      {lastUpdate && (
+                        <span className="text-xs" style={{ color: C.textSoft }}>Mise à jour : {formatTime(lastUpdate)}</span>
+                      )}
+                      {device ? (
+                        <div className="flex items-center gap-1.5 text-xs">
+                          {isOnline
+                            ? <><Wifi className="w-3.5 h-3.5" style={{ color: "#5aaa6e" }} /><span style={{ color: "#5aaa6e" }}>En ligne</span></>
+                            : <><WifiOff className="w-3.5 h-3.5" style={{ color: C.textSoft }} /><span style={{ color: C.textSoft }}>Hors ligne</span></>}
+                          {device.dernier_signal && (
+                            <span style={{ color: C.textSoft }} className="ml-1">
+                              · {formatDistanceToNow(new Date(device.dernier_signal), { addSuffix: true, locale: fr })}
+                            </span>
+                          )}
+                        </div>
+                      ) : <span className="text-xs" style={{ color: C.textSoft }}>Aucun appareil</span>}
+                      {lastUpdate && (
+                        <div className="flex items-center gap-1.5 text-xs" style={{ color: "#5aaa6e" }}>
+                          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                          Temps réel
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {!deviceId ? (
+                    <div className="text-center py-8" style={{ color: C.textSoft }}>
+                      <Activity className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                      <p className="text-sm">Aucun capteur associé à ce patient</p>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <VitalCard icon="❤️" label="Fréq. Cardiaque"
+                          value={latestVital?.bpm?.toString() ?? "—"} unit="BPM"
+                          status={getBpmStatus(latestVital?.bpm ?? null)} delay={0.1} borderColor="border-l-primary">
+                          <div className="mt-2 h-1 rounded-full" style={{ background: "rgba(74,157,135,0.12)" }}>
+                            <div className="h-full rounded-full animate-pulse" style={{ background: C.primary, width: `${Math.min(((latestVital?.bpm ?? 0) / 200) * 100, 100)}%` }} />
+                          </div>
+                          <p className="text-xs mt-1" style={{ color: C.textSoft }}>Normal : 60-100 BPM</p>
+                        </VitalCard>
+                        <VitalCard icon="🩸" label="SpO2"
+                          value={latestVital?.spo2?.toString() ?? "—"} unit="%"
+                          status={getSpo2Status(latestVital?.spo2 ?? null)} delay={0.15} borderColor="border-l-safe">
+                          <p className="text-xs mt-2" style={{ color: C.textSoft }}>Normal : 95-100%</p>
+                        </VitalCard>
+                        <VitalCard icon="🌡️" label="Température"
+                          value={latestVital?.temperature?.toFixed(1) ?? "—"} unit="°C"
+                          status={getTempStatus(latestVital?.temperature ?? null)} delay={0.2} borderColor="border-l-accent">
+                          <p className="text-xs mt-2" style={{ color: C.textSoft }}>Normal : 36.1-37.2°C</p>
+                        </VitalCard>
+                        <VitalCard
+                          icon={latestVital?.chute ? "🚨" : "✅"}
+                          label="Détection Chute"
+                          value={latestVital?.chute ? "ALERTE" : "Normal"} unit=""
+                          status={latestVital?.chute ? "critical" : "safe"} delay={0.25}
+                          borderColor={latestVital?.chute ? "border-l-destructive" : "border-l-safe"}>
+                          <p className="text-xs mt-2" style={{ color: C.textSoft }}>
+                            {latestVital?.chute ? "⚠️ Chute détectée !" : "Aucune chute détectée"}
+                          </p>
+                        </VitalCard>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-4 text-xs" style={{ color: C.textSoft }}>
+                        {latestVital?.niveau_batterie != null && (
+                          <div className="flex items-center gap-1.5">
+                            <Battery className="w-3.5 h-3.5" />
+                            <span style={{ color: batteryColor(latestVital.niveau_batterie) }}>
+                              Batterie : {latestVital.niveau_batterie}%
+                            </span>
+                          </div>
+                        )}
+                        {latestVital?.latitude && latestVital?.longitude && (
+                          <div className="flex items-center gap-1.5">
+                            <MapPin className="w-3 h-3" style={{ color: C.primary }} />
+                            <a href={`https://maps.google.com/?q=${latestVital.latitude},${latestVital.longitude}`}
+                              target="_blank" rel="noopener noreferrer"
+                              className="hover:underline transition-colors"
+                              style={{ color: C.textSoft }}>
+                              {Number(latestVital.latitude).toFixed(5)}, {Number(latestVital.longitude).toFixed(5)} — Voir sur la carte
+                            </a>
+                          </div>
+                        )}
+                      </div>
+
+                      {vitalsHistory.length === 0 ? (
+                        <div className="text-center py-10" style={{ color: C.textSoft }}>
+                          <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                          <p className="text-sm">En attente des premières mesures...</p>
+                        </div>
+                      ) : (
+                        <>
+                          {[
+                            { title: "Fréquence Cardiaque — 20 dernières mesures", key: "BPM",         color: C.primary,   domain: [40, 160] as [number,number] },
+                            { title: "SpO2 — 20 dernières mesures",                 key: "SpO2",        color: "#5aaa6e",   domain: [80, 100] as [number,number] },
+                            { title: "Température — 20 dernières mesures",          key: "Température", color: "#f97316",   domain: [35, 41]  as [number,number] },
+                          ].map((chart) => (
+                            <div key={chart.key}>
+                              <div className="flex items-center justify-between mb-3">
+                                <h4 className="text-xs font-semibold dp-sora" style={{ color: C.text }}>{chart.title}</h4>
+                                {chart.key === "BPM" && <RefreshCw className="w-3.5 h-3.5 animate-spin" style={{ color: C.textSoft, animationDuration: "3s" }} />}
+                              </div>
+                              <ResponsiveContainer width="100%" height={180}>
+                                <LineChart data={chartData}>
+                                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(74,157,135,0.12)" />
+                                  <XAxis dataKey="time" tick={{ fontSize: 10, fill: C.textSoft }} stroke="transparent" />
+                                  <YAxis domain={chart.domain} tick={{ fontSize: 10, fill: C.textSoft }} stroke="transparent" />
+                                  <Tooltip contentStyle={{ background: "rgba(255,255,255,0.95)", border: "1px solid rgba(74,157,135,0.20)", borderRadius: "10px", fontSize: "12px" }} />
+                                  {chart.key === "Température" && <ReferenceLine y={37.5} stroke="#f97316" strokeDasharray="4 2" strokeOpacity={0.5} />}
+                                  <Line type="monotone" dataKey={chart.key} stroke={chart.color} strokeWidth={2} dot={false} activeDot={{ r: 4, fill: chart.color }} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          ))}
+                        </>
+                      )}
+                    </>
+                  )}
                 </div>
-              </Section>
-            </motion.div>
+              </motion.div>
+
+              {/* Alertes récentes */}
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.20 }}>
+                <Section title={`Alertes récentes (${alerts.length})`} icon={<AlertTriangle className="w-3.5 h-3.5" />}>
+                  {alerts.length === 0
+                    ? <p className="text-xs" style={{ color: C.textSoft }}>Aucune alerte récente</p>
+                    : (
+                      <div className="space-y-2">
+                        {alerts.map(a => {
+                          const cfg = SEVERITY_CFG[a.severity] ?? SEVERITY_CFG.LOW;
+                          return (
+                            <div key={a.id} className="flex items-start gap-2.5 p-2.5 rounded-xl border text-xs"
+                              style={{ background: cfg.bg, borderColor: cfg.border, borderLeftWidth: "3px", borderLeftColor: cfg.color }}>
+                              <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" style={{ color: cfg.color }} />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-semibold dp-sora" style={{ color: cfg.color }}>{a.type.replace(/_/g, " ")}</p>
+                                <p className="mt-0.5" style={{ color: C.textSoft }}>{a.message}</p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1 shrink-0">
+                                <span style={{ color: C.textSoft }}>{formatDistanceToNow(new Date(a.created_at), { addSuffix: true, locale: fr })}</span>
+                                {!a.resolved && (
+                                  <span className="px-1.5 py-0.5 rounded-full text-[10px] font-semibold"
+                                    style={{ background: cfg.bg, color: cfg.color }}>Non résolu</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <button onClick={() => navigate("/doctor/alerts")}
+                          className="flex items-center gap-1 text-xs font-semibold hover:underline mt-1"
+                          style={{ color: C.primary }}>
+                          Voir toutes les alertes <ChevronRight className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                </Section>
+              </motion.div>
+
+              {/* Anomalies IA */}
+              {anomalies.length > 0 && (
+                <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.25 }}>
+                  <Section title="Anomalies détectées par IA" icon={<Zap className="w-3.5 h-3.5" />}>
+                    <div className="space-y-2">
+                      {anomalies.map(a => (
+                        <div key={a.id} className="flex items-center justify-between p-2.5 rounded-xl text-xs"
+                          style={{ background: "rgba(74,157,135,0.05)", border: "1px solid rgba(74,157,135,0.14)" }}>
+                          <div>
+                            <p className="font-semibold dp-sora" style={{ color: C.text }}>{a.type_anomalie.replace(/_/g, " ")}</p>
+                            <p className="mt-0.5" style={{ color: C.textSoft }}>{formatDistanceToNow(new Date(a.detected_at), { addSuffix: true, locale: fr })}</p>
+                          </div>
+                          {a.score_confiance != null && (
+                            <div className="flex items-center gap-1.5">
+                              <div className="h-1.5 w-16 rounded-full overflow-hidden" style={{ background: "rgba(74,157,135,0.12)" }}>
+                                <div className="h-full rounded-full" style={{ background: C.primary, width: `${Math.min(a.score_confiance * 40, 100)}%` }} />
+                              </div>
+                              <span style={{ color: C.textSoft }}>{a.score_confiance.toFixed(2)}</span>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </Section>
+                </motion.div>
+              )}
+
+              {/* Notes cliniques */}
+              <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.30 }}>
+                <Section title="Notes cliniques" icon={<FileText className="w-3.5 h-3.5" />}>
+                  <textarea value={notes} onChange={e => setNotes(e.target.value)}
+                    placeholder="Ajouter des notes cliniques..."
+                    className="dp-input" rows={5} style={{ resize: "none" }} />
+                  <div className="flex items-center justify-between mt-3">
+                    {notesSaved && (
+                      <span className="flex items-center gap-1 text-xs font-semibold" style={{ color: C.primary }}>
+                        <CheckCircle className="w-3.5 h-3.5" /> Sauvegardé
+                      </span>
+                    )}
+                    <button onClick={handleSaveNotes} disabled={savingNotes}
+                      className="dp-btn-primary ml-auto">
+                      {savingNotes ? <Loader className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                      Sauvegarder
+                    </button>
+                  </div>
+                </Section>
+              </motion.div>
+
+            </div>
           </div>
         </div>
       </div>

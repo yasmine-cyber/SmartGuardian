@@ -24,6 +24,26 @@ const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
   { id: "security", label: "Sécurité", icon: <Lock className="w-4 h-4" /> },
 ];
 
+/* ── Palette ─────────────────────────────────────────────── */
+const C = {
+  primary:     "#4a9d87",
+  primaryDark: "#3d8c7a",
+  secondary:   "#5b8fa0",
+  text:        "#1a2e28",
+  textSoft:    "rgba(30,60,50,0.62)",
+  gold:        "#d4a843",
+  muted:       "#c0504a",
+};
+
+const glass: React.CSSProperties = {
+  background: "rgba(255,255,255,0.78)",
+  backdropFilter: "blur(16px)",
+  WebkitBackdropFilter: "blur(16px)",
+  border: "1px solid rgba(74,157,135,0.16)",
+  borderRadius: "22px",
+  boxShadow: "0 12px 36px rgba(30,60,50,0.06)",
+};
+
 const DoctorSettings = () => {
   const [activeTab, setActiveTab] = useState<Tab>("profile");
   const [loading, setLoading] = useState(true);
@@ -84,7 +104,6 @@ const DoctorSettings = () => {
     load();
   }, []);
 
-  // ── Upload photo depuis le PC ──
   const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !userId) return;
@@ -208,37 +227,90 @@ const DoctorSettings = () => {
   const togglePassword = (field: keyof typeof showPasswords) =>
     setShowPasswords((p) => ({ ...p, [field]: !p[field] }));
 
-  const inputClass =
-    "w-full bg-muted/50 border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 transition-all";
-
-  const labelClass = "block text-xs font-medium text-muted-foreground mb-1";
-
+  /* ── Render ── */
   return (
     <DashboardLayout role="doctor">
-      <div className="space-y-6 max-w-2xl">
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-2xl font-bold text-foreground">Paramètres</h1>
-          <p className="text-muted-foreground text-sm mt-1">Gérer votre profil et vos préférences</p>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap');
+        .ds-page * { font-family: 'DM Sans', sans-serif; }
+        .ds-page h1, .ds-page h2, .ds-sora { font-family: 'Sora', sans-serif !important; }
+        .ds-gradient-text {
+          background: linear-gradient(120deg, #3d8c7a 0%, #4a9d87 55%, #5b8fa0 100%);
+          -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        @keyframes dsAurora {
+          0%,100% { transform: translate(0,0) scale(1); opacity: .48; }
+          50%      { transform: translate(26px,-16px) scale(1.05); opacity: .75; }
+        }
+        .ds-aurora { position:absolute; border-radius:50%; filter:blur(80px); pointer-events:none; }
+        .ds-input {
+          width: 100%;
+          padding: 10px 14px;
+          font-size: 0.875rem;
+          border-radius: 14px;
+          background: rgba(74,157,135,0.05);
+          border: 1px solid rgba(74,157,135,0.18);
+          color: #1a2e28;
+          transition: box-shadow .2s, border-color .2s;
+          outline: none;
+          font-family: 'DM Sans', sans-serif;
+        }
+        .ds-input:focus { border-color: rgba(74,157,135,0.45); box-shadow: 0 0 0 3px rgba(74,157,135,0.14); }
+        .ds-input:disabled { opacity: 0.55; cursor: not-allowed; }
+        .ds-input::placeholder { color: rgba(30,60,50,0.38); }
+        .ds-divider { height: 1px; background: rgba(74,157,135,0.12); border: none; margin: 0; }
+      `}</style>
+
+      <div className="ds-page relative space-y-5 max-w-2xl">
+
+        {/* Aurora blobs */}
+        <div className="ds-aurora" style={{ width: 380, height: 380, background: "rgba(74,157,135,0.11)", top: -80, right: -60, animation: "dsAurora 22s ease-in-out infinite" }} />
+        <div className="ds-aurora" style={{ width: 300, height: 300, background: "rgba(91,143,160,0.09)", top: 300, left: -100, animation: "dsAurora 18s ease-in-out infinite reverse" }} />
+
+        {/* ── Header ── */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
+          className="p-6 rounded-3xl relative overflow-hidden" style={glass}>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0"
+              style={{
+                background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                boxShadow: "0 8px 24px rgba(74,157,135,0.30)",
+              }}>
+              <User className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold tracking-tight ds-sora" style={{ color: C.text }}>
+                Para<span className="ds-gradient-text">mètres</span>
+              </h1>
+              <p className="text-sm mt-1" style={{ color: C.textSoft }}>Gérer votre profil et vos préférences</p>
+            </div>
+          </div>
         </motion.div>
 
         {loading ? (
           <div className="flex items-center justify-center py-16">
-            <Loader className="w-6 h-6 text-primary animate-spin" />
+            <Loader className="w-6 h-6 animate-spin" style={{ color: C.primary }} />
           </div>
         ) : (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-            {/* Tab Bar */}
-            <div className="flex gap-1 bg-muted/50 rounded-xl p-1 border border-border">
+          <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+
+            {/* ── Tab bar ── */}
+            <div className="flex gap-1 p-1 rounded-2xl w-full"
+              style={{ background: "rgba(74,157,135,0.08)", border: "1px solid rgba(74,157,135,0.14)" }}>
               {TABS.map((tab) => (
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id)}
-                  className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                  className="flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-sm font-semibold transition-all ds-sora"
+                  style={
                     activeTab === tab.id
-                      ? "bg-card text-foreground shadow-sm border border-border"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                >
+                      ? {
+                          background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                          color: "#fff",
+                          boxShadow: "0 4px 14px rgba(74,157,135,0.28)",
+                        }
+                      : { color: C.textSoft }
+                  }>
                   {tab.icon}
                   <span className="hidden sm:inline">{tab.label}</span>
                 </button>
@@ -246,7 +318,8 @@ const DoctorSettings = () => {
             </div>
 
             <AnimatePresence mode="wait">
-              {/* ── PROFILE TAB ── */}
+
+              {/* ══════════ PROFILE TAB ══════════ */}
               {activeTab === "profile" && (
                 <motion.div
                   key="profile"
@@ -254,139 +327,126 @@ const DoctorSettings = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.18 }}
-                  className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5"
-                >
-                  {/* Avatar section */}
+                  className="p-6 space-y-5"
+                  style={glass}>
+
+                  {/* Avatar */}
                   <div className="flex items-center gap-5">
-                    <div className="relative flex-shrink-0">
-                      <div className="w-20 h-20 rounded-full bg-primary/10 border-2 border-primary/20 flex items-center justify-center overflow-hidden">
+                    <div className="relative shrink-0">
+                      <div className="w-20 h-20 rounded-full overflow-hidden flex items-center justify-center"
+                        style={{
+                          background: `linear-gradient(135deg, rgba(74,157,135,0.18), rgba(91,143,160,0.14))`,
+                          border: "2px solid rgba(74,157,135,0.25)",
+                        }}>
                         {uploadingPhoto ? (
-                          <Loader className="w-6 h-6 text-primary animate-spin" />
+                          <Loader className="w-6 h-6 animate-spin" style={{ color: C.primary }} />
                         ) : profile.photo_url ? (
-                          <img
-                            src={profile.photo_url}
-                            alt="Photo de profil"
-                            className="w-full h-full object-cover"
-                          />
+                          <img src={profile.photo_url} alt="Photo de profil" className="w-full h-full object-cover" />
                         ) : (
-                          <span className="text-2xl font-bold text-primary">
+                          <span className="text-2xl font-bold ds-sora" style={{ color: C.primaryDark }}>
                             {profile.prenom?.[0]?.toUpperCase() || ""}
                             {profile.nom?.[0]?.toUpperCase() || ""}
                           </span>
                         )}
                       </div>
-
-                      <input
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        className="hidden"
-                        onChange={handlePhotoChange}
-                      />
-
+                      <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handlePhotoChange} />
                       <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploadingPhoto}
                         title="Changer la photo"
-                        className="absolute -bottom-1 -right-1 w-7 h-7 bg-primary rounded-full flex items-center justify-center shadow-sm hover:brightness-110 transition-all disabled:opacity-50"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-primary-foreground" />
+                        className="absolute -bottom-1 -right-1 w-7 h-7 rounded-full flex items-center justify-center shadow-md transition-all hover:scale-110 disabled:opacity-50"
+                        style={{
+                          background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                          boxShadow: "0 4px 10px rgba(74,157,135,0.35)",
+                        }}>
+                        <Camera className="w-3.5 h-3.5 text-white" />
                       </button>
                     </div>
 
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-foreground truncate">
+                      <p className="font-semibold truncate ds-sora" style={{ color: C.text }}>
                         Dr. {profile.prenom} {profile.nom}
                       </p>
-                      <p className="text-xs text-muted-foreground">{profile.specialite || "Médecin"}</p>
-                      <p className="text-xs text-muted-foreground truncate">{profile.email}</p>
+                      <p className="text-xs" style={{ color: C.textSoft }}>{profile.specialite || "Médecin"}</p>
+                      <p className="text-xs truncate" style={{ color: C.textSoft }}>{profile.email}</p>
 
-                      <div className="flex items-center gap-2 mt-2 flex-wrap">
+                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
                         <button
                           onClick={() => fileInputRef.current?.click()}
                           disabled={uploadingPhoto}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted/50 text-xs font-medium text-foreground hover:bg-muted transition-all disabled:opacity-50"
-                        >
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:scale-105 disabled:opacity-50"
+                          style={{ background: "rgba(74,157,135,0.10)", color: C.primaryDark, border: "1px solid rgba(74,157,135,0.22)" }}>
                           <Upload className="w-3 h-3" />
-                          {uploadingPhoto ? "Envoi en cours..." : "Changer la photo"}
+                          {uploadingPhoto ? "Envoi..." : "Changer la photo"}
                         </button>
                         {profile.photo_url && (
                           <button
                             onClick={handleRemovePhoto}
                             disabled={saving || uploadingPhoto}
-                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-border bg-muted/50 text-xs font-medium text-muted-foreground hover:text-destructive hover:border-destructive/40 transition-all disabled:opacity-50"
-                          >
+                            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition-all hover:scale-105 disabled:opacity-50"
+                            style={{ background: "rgba(192,80,74,0.08)", color: C.muted, border: "1px solid rgba(192,80,74,0.20)" }}>
                             <X className="w-3 h-3" />
                             Supprimer
                           </button>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1.5">JPG, PNG · max 2 Mo</p>
+                      <p className="text-xs mt-1.5" style={{ color: C.textSoft }}>JPG, PNG · max 2 Mo</p>
                     </div>
                   </div>
 
-                  <hr className="border-border" />
+                  <hr className="ds-divider" />
 
-                  {/* Form Grid */}
+                  {/* Form grid */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {[
+                      { key: "prenom", label: "Prénom", placeholder: "Prénom", span: false },
+                      { key: "nom",    label: "Nom",    placeholder: "Nom",    span: false },
+                      { key: "telephone", label: "Téléphone", placeholder: "+216 XX XXX XXX", span: false },
+                    ].map(({ key, label, placeholder, span }) => (
+                      <div key={key} className={span ? "sm:col-span-2" : ""}>
+                        <label className="block text-xs font-semibold mb-1.5 ds-sora" style={{ color: C.textSoft }}>{label}</label>
+                        <input
+                          className="ds-input"
+                          value={(profile as any)[key]}
+                          onChange={(e) => setProfile((p) => ({ ...p, [key]: e.target.value }))}
+                          placeholder={placeholder}
+                        />
+                      </div>
+                    ))}
+
+                    {/* Sexe select */}
                     <div>
-                      <label className={labelClass}>Prénom</label>
-                      <input
-                        className={inputClass}
-                        value={profile.prenom}
-                        onChange={(e) => setProfile((p) => ({ ...p, prenom: e.target.value }))}
-                        placeholder="Prénom"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Nom</label>
-                      <input
-                        className={inputClass}
-                        value={profile.nom}
-                        onChange={(e) => setProfile((p) => ({ ...p, nom: e.target.value }))}
-                        placeholder="Nom"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Téléphone</label>
-                      <input
-                        className={inputClass}
-                        value={profile.telephone}
-                        onChange={(e) => setProfile((p) => ({ ...p, telephone: e.target.value }))}
-                        placeholder="+216 XX XXX XXX"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Sexe</label>
+                      <label className="block text-xs font-semibold mb-1.5 ds-sora" style={{ color: C.textSoft }}>Sexe</label>
                       <select
-                        className={inputClass}
+                        className="ds-input"
                         value={profile.sexe}
-                        onChange={(e) => setProfile((p) => ({ ...p, sexe: e.target.value }))}
-                      >
+                        onChange={(e) => setProfile((p) => ({ ...p, sexe: e.target.value }))}>
                         <option value="">Non spécifié</option>
                         <option value="homme">Homme</option>
                         <option value="femme">Femme</option>
                       </select>
                     </div>
+
                     <div className="sm:col-span-2">
-                      <label className={labelClass}>Spécialité</label>
+                      <label className="block text-xs font-semibold mb-1.5 ds-sora" style={{ color: C.textSoft }}>Spécialité</label>
                       <input
-                        className={inputClass}
+                        className="ds-input"
                         value={profile.specialite}
                         onChange={(e) => setProfile((p) => ({ ...p, specialite: e.target.value }))}
                         placeholder="Ex: Cardiologie"
                       />
                     </div>
+
                     <div className="sm:col-span-2">
-                      <label className={labelClass}>Numéro de licence</label>
+                      <label className="block text-xs font-semibold mb-1.5 ds-sora" style={{ color: C.textSoft }}>Numéro de licence</label>
                       <input
-                        className={`${inputClass} opacity-60 cursor-not-allowed`}
+                        className="ds-input"
                         value={profile.numero_licence}
                         disabled
                         readOnly
                         title="Non modifiable"
                       />
-                      <p className="text-xs text-muted-foreground mt-1">Ce champ n'est pas modifiable.</p>
+                      <p className="text-xs mt-1" style={{ color: C.textSoft }}>Ce champ n'est pas modifiable.</p>
                     </div>
                   </div>
 
@@ -394,8 +454,12 @@ const DoctorSettings = () => {
                     <button
                       onClick={handleSaveProfile}
                       disabled={saving}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-                    >
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50 ds-sora"
+                      style={{
+                        background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
+                        color: "#fff",
+                        boxShadow: "0 6px 18px rgba(74,157,135,0.28)",
+                      }}>
                       {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                       Enregistrer
                     </button>
@@ -403,7 +467,7 @@ const DoctorSettings = () => {
                 </motion.div>
               )}
 
-              {/* ── SECURITY TAB ── */}
+              {/* ══════════ SECURITY TAB ══════════ */}
               {activeTab === "security" && (
                 <motion.div
                   key="security"
@@ -411,31 +475,33 @@ const DoctorSettings = () => {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   transition={{ duration: 0.18 }}
-                  className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5"
-                >
+                  className="p-6 space-y-5"
+                  style={glass}>
+
                   <div>
-                    <h2 className="text-sm font-semibold text-foreground">Changer le mot de passe</h2>
-                    <p className="text-xs text-muted-foreground mt-0.5">
+                    <h2 className="text-sm font-semibold ds-sora" style={{ color: C.text }}>Changer le mot de passe</h2>
+                    <p className="text-xs mt-0.5" style={{ color: C.textSoft }}>
                       Utilisez un mot de passe fort d'au moins 6 caractères.
                     </p>
                   </div>
 
-                  <hr className="border-border" />
+                  <hr className="ds-divider" />
 
                   <div className="space-y-4">
                     {(
                       [
-                        { field: "current", label: "Mot de passe actuel", placeholder: "••••••••" },
-                        { field: "new", label: "Nouveau mot de passe", placeholder: "••••••••" },
+                        { field: "current", label: "Mot de passe actuel",             placeholder: "••••••••" },
+                        { field: "new",     label: "Nouveau mot de passe",             placeholder: "••••••••" },
                         { field: "confirm", label: "Confirmer le nouveau mot de passe", placeholder: "••••••••" },
                       ] as const
                     ).map(({ field, label, placeholder }) => (
                       <div key={field}>
-                        <label className={labelClass}>{label}</label>
+                        <label className="block text-xs font-semibold mb-1.5 ds-sora" style={{ color: C.textSoft }}>{label}</label>
                         <div className="relative">
                           <input
                             type={showPasswords[field] ? "text" : "password"}
-                            className={`${inputClass} pr-10`}
+                            className="ds-input"
+                            style={{ paddingRight: "2.5rem" }}
                             value={passwords[field]}
                             onChange={(e) => setPasswords((p) => ({ ...p, [field]: e.target.value }))}
                             placeholder={placeholder}
@@ -443,8 +509,8 @@ const DoctorSettings = () => {
                           <button
                             type="button"
                             onClick={() => togglePassword(field)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                          >
+                            className="absolute right-3 top-1/2 -translate-y-1/2 transition-colors"
+                            style={{ color: C.textSoft }}>
                             {showPasswords[field] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
@@ -453,15 +519,19 @@ const DoctorSettings = () => {
                   </div>
 
                   {passwords.new && passwords.confirm && passwords.new !== passwords.confirm && (
-                    <p className="text-xs text-red-500">Les mots de passe ne correspondent pas.</p>
+                    <p className="text-xs font-medium" style={{ color: C.muted }}>Les mots de passe ne correspondent pas.</p>
                   )}
 
                   <div className="flex justify-end pt-1">
                     <button
                       onClick={handleChangePassword}
                       disabled={saving || !passwords.new || !passwords.confirm}
-                      className="flex items-center gap-2 px-4 py-2 bg-primary text-primary-foreground rounded-xl text-sm font-medium hover:brightness-110 transition-all disabled:opacity-50"
-                    >
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all hover:scale-105 disabled:opacity-50 ds-sora"
+                      style={{
+                        background: `linear-gradient(135deg, ${C.secondary}, ${C.primary})`,
+                        color: "#fff",
+                        boxShadow: "0 6px 18px rgba(91,143,160,0.28)",
+                      }}>
                       {saving ? <Loader className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
                       Modifier le mot de passe
                     </button>
