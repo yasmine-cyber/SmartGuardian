@@ -48,11 +48,11 @@ const PendingActivation = () => {
   const [patientName, setPatientName] = useState("");
 
   // Determine which step we're on based on status
-  const currentStep =
-    status === null ? 0 :
-    status === "pending" ? 1 :
-    status === "approved" ? 2 :
-    status === "completed" ? 4 : 1;
+const currentStep =
+  status === null ? 0 :
+  status === "pending" ? 1 :
+  status === "approved" ? 2 :
+  status === "completed" ? 4 : 1;
 
   const fetchStatus = async () => {
     try {
@@ -181,7 +181,7 @@ const PendingActivation = () => {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-card-foreground">
-                  Votre bracelet est en préparation
+                  Votre dispositif est en préparation
                 </h1>
                 <p className="text-sm text-muted-foreground mt-1">
                   Vous recevrez votre dispositif dans <span className="font-semibold text-foreground">24 à 48 heures</span>.
@@ -198,7 +198,7 @@ const PendingActivation = () => {
             </p>
             {STEPS.map((step, i) => {
               const isDone = i < currentStep;
-              const isActive = i === currentStep - 1 || (i === 1 && currentStep <= 1);
+              const isActive = i === currentStep;
               const Icon = step.icon;
 
               return (

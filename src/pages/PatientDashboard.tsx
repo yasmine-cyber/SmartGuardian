@@ -9,7 +9,6 @@ import { useNavigate } from "react-router-dom";
 
 import L from "leaflet";
 
-// Fix Leaflet's default icon paths when bundled with Vite / Webpack
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon   from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
@@ -41,7 +40,6 @@ interface Alerte {
   resolved: boolean;
 }
 
-// ─── Palette synced with landing page ───────────────────────────────────────
 const C = {
   primary:     "#4a9d87",
   primaryDark: "#3d8c7a",
@@ -79,7 +77,6 @@ const SEVERITY_MAP: Record<string, { label: string; uiStatus: string; color: str
   LOW:      { label: "Faible",    uiStatus: "normal",   color: C.primary,   bg: "rgba(74,157,135,0.10)" },
 };
 
-// ─── Reusable visual primitives ─────────────────────────────────────────────
 const glass = {
   background: "rgba(255,255,255,0.78)",
   backdropFilter: "blur(16px)",
@@ -99,9 +96,10 @@ const PatientDashboard = () => {
   const [patientId, setPatientId]                 = useState<string | null>(null);
   const [loadingVitals, setLoadingVitals]         = useState(true);
   const [lastKnownLocation, setLastKnownLocation] = useState<LastKnownLocation | null>(null);
+  // ── NEW: accès limité (bracelet pas encore activé) ──────────────────────
+  const [isLimitedAccess, setIsLimitedAccess]     = useState(false);
   const navigate = useNavigate();
 
-  // Leaflet map refs — managed imperatively to avoid re-renders
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef  = useRef<L.Map | null>(null);
   const markerRef       = useRef<L.Marker | null>(null);
@@ -119,7 +117,6 @@ const PatientDashboard = () => {
     return "stable";
   };
 
-  // ── Helper: update lastKnownLocation from a vitals row (only if coords present) ──
   const maybeUpdateLocation = (data: VitalSigns) => {
     if (data.latitude !== null && data.longitude !== null) {
       const isLive = (Date.now() - new Date(data.recorded_at).getTime()) < 30 * 60 * 1000;
@@ -127,7 +124,6 @@ const PatientDashboard = () => {
     }
   };
 
-  // ── Fetch the most recent vital_signs row that actually has GPS coords ────
   const fetchLastKnownLocation = async (devId: string) => {
     const { data } = await supabase
       .from("vital_signs")
@@ -150,7 +146,6 @@ const PatientDashboard = () => {
     }
   };
 
-  // ── Fetch the latest vitals row (may or may not have GPS) ─────────────────
   const fetchLatestVitals = async (devId?: string) => {
     if (!devId) return;
     const { data } = await supabase
@@ -162,7 +157,7 @@ const PatientDashboard = () => {
       .single();
     if (data) {
       setVitals(data);
-      maybeUpdateLocation(data); // updates location only if this row has coords
+      maybeUpdateLocation(data);
     }
   };
 
@@ -183,13 +178,24 @@ const PatientDashboard = () => {
         .order("created_at", { ascending: false })
         .limit(1).maybeSingle();
 
+      // ── Vérifications d'accès ────────────────────────────────────────────
       if (!req || req.payment_status !== "paid") { navigate("/checkout"); return; }
-      if (req.status === "pending") { navigate("/pending"); return; }
-      if (req.status === "approved" && req.device_id) {
-        const { data: device } = await supabase.from("devices").select("actif").eq("id", req.device_id).single();
-        if (!device?.actif) { navigate("/pending"); return; }
+      if (req.status === "rejected")             { navigate("/checkout"); return; }
+
+      // Accès limité si bracelet pas encore approuvé ou pas encore activé
+      if (req.status === "pending") {
+        setIsLimitedAccess(true);
+        // On ne redirige PAS — accès limité autorisé
+      } else if (req.status === "approved" && req.device_id) {
+        const { data: device } = await supabase
+          .from("devices").select("actif").eq("id", req.device_id).single();
+        if (!device?.actif) {
+          setIsLimitedAccess(true);
+          // On ne redirige PAS — accès limité autorisé
+        }
+        // Si device.actif === true → accès normal, isLimitedAccess reste false
       }
-      if (req.status === "rejected") { navigate("/checkout"); return; }
+      // Si status === "completed" → accès normal
 
       const { data: util } = await supabase
         .from("utilisateurs").select("nom, prenom").eq("id", user.id).single();
@@ -205,11 +211,9 @@ const PatientDashboard = () => {
 
       if (device) {
         setDeviceId(device.id);
-        // Fetch last GPS position (searches all rows, not just the latest)
         await fetchLastKnownLocation(device.id);
       }
 
-      // Fetch latest vitals row (will also update location if that row has coords)
       await fetchLatestVitals(device?.id);
 
       const { data: alertesData } = await supabase
@@ -268,7 +272,7 @@ const PatientDashboard = () => {
     return () => { supabase.removeChannel(ch); };
   }, [patientId]);
 
-  // ── Initialise Leaflet map once the container is mounted ──────────────────
+  // ── Initialise Leaflet map ────────────────────────────────────────────────
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -374,6 +378,33 @@ const PatientDashboard = () => {
         <div className="sg-aurora-a" style={{ background: "rgba(91,143,160,0.15)", top: 200, right: -100, animation: "sgAurora 22s ease-in-out infinite reverse" }} />
 
         <div className="relative space-y-6 max-w-6xl">
+
+          {/* ── Bannière accès limité ─────────────────────────────────────── */}
+          {isLimitedAccess && (
+            <motion.div
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="flex items-center gap-3 px-5 py-3 rounded-2xl text-sm"
+              style={{
+                background:   "rgba(212,168,67,0.12)",
+                border:       "1px solid rgba(212,168,67,0.35)",
+                color:        "#a8821f",
+                backdropFilter: "blur(8px)",
+              }}
+            >
+              <span className="text-base flex-shrink-0">⏳</span>
+              <span className="font-medium">
+                Accès limité — votre dispositif est en cours de préparation.
+                Les données vitales seront disponibles après activation du dispositif.
+              </span>
+              <button
+                onClick={() => navigate("/pending")}
+                className="ml-auto flex-shrink-0 text-xs font-semibold underline underline-offset-2 hover:opacity-70 transition-opacity"
+              >
+                Voir le statut →
+              </button>
+            </motion.div>
+          )}
 
           {/* ── Greeting ── */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}

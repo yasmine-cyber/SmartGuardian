@@ -3,11 +3,11 @@ import { Link } from "react-router-dom";
 import { motion, useInView } from "framer-motion";
 import {
   Heart, Brain, MapPin, Users, Activity,
-  Bell, ArrowRight, ChevronRight, WifiOff, Lock,
+  Bell, ArrowRight, ChevronRight, Wifi, Lock,
   Watch, Sparkles, AlertCircle, Stethoscope, Shield, Radio,
 } from "lucide-react";
 
-// ─── Central Palette ──────────────────────────────────────────────
+// ─── Central Palette ────────────────────────────────────
 const C = {
   primary:     "#4a9d87",
   primaryDark: "#3d8c7a",
@@ -70,27 +70,27 @@ const FooterModal = ({ title, onClose, children }: { title: string; onClose: () 
 // ─── Feature Card Data ────────────────────────────────────────────
 const featureData = [
   {
-    icon: WifiOff, title: "Fonctionnement Autonome",
-    desc: "Fonctionne sans WiFi — le capteur analyse et alerte de manière indépendante, même en zone isolée.",
-    category: "IA", accent: "#4a9d87", bg: "linear-gradient(135deg, #e8f2ee 0%, #eef5f2 100%)",
+    icon: Wifi, title: "Fonctionne via WiFi",
+    desc: "Aucune carte SIM ni réseau cellulaire requis — le capteur communique via WiFi pour transmettre les données en temps réel.",
+    category: "Connectivité", accent: "#4a9d87", bg: "linear-gradient(135deg, #e8f2ee 0%, #eef5f2 100%)",
     iconBg: "rgba(74,157,135,0.12)",
   },
   {
-    icon: Brain, title: "IA Embarquée",
-    desc: "La détection se fait directement sur le capteur portable, sans latence réseau. Analyse en temps réel.",
+    icon: Brain, title: "IA Serveur",
+    desc: "L'analyse est effectuée par un modèle IA hébergé sur un serveur FastAPI — puissante, évolutive et indépendante du capteur IoT.",
     category: "IA", accent: "#3d8c9e", bg: "linear-gradient(135deg, #e2eef4 0%, #eaf3f7 100%)",
     iconBg: "rgba(61,140,158,0.12)",
   },
   {
     icon: MapPin, title: "Localisation GPS",
-    desc: "Position en temps réel transmise automatiquement lors d'une alerte critique pour intervention rapide.",
+    desc: "La position du patient est suivie en continu et accessible à tout moment par son proche, en temps réel",
     category: "Sécurité", accent: "#6b7fa8", bg: "linear-gradient(135deg, #e6eaf4 0%, #eceef8 100%)",
     iconBg: "rgba(107,127,168,0.12)",
   },
   {
-    icon: Bell, title: "Alertes Multi-Canal",
-    desc: "Notifications instantanées via application mobile, SMS et appel vocal simultanément.",
-    category: "Connectivité", accent: "#5b8fa0", bg: "linear-gradient(135deg, #e2ecf2 0%, #eaf3f8 100%)",
+    icon: Bell, title: "Alertes Intelligentes",
+    desc: "Dès qu'une anomalie est détectée par l'IA, une alerte est instantanément déclenchée sur les interfaces web et mobile de l'équipe de soins.",
+    category: "Alertes", accent: "#5b8fa0", bg: "linear-gradient(135deg, #e2ecf2 0%, #eaf3f8 100%)",
     iconBg: "rgba(91,143,160,0.12)",
   },
   {
@@ -101,7 +101,7 @@ const featureData = [
   },
   {
     icon: Lock, title: "Sécurisé & Privé",
-    desc: "Chiffrement de bout en bout (AES-256) pour toutes les transmissions de données médicales.",
+    desc: "Accès aux données médicales strictement limité aux personnes autorisées — patient, médecins désignés et famille uniquement.",
     category: "Sécurité", accent: "#7a8fa0", bg: "linear-gradient(135deg, #e4ecf2 0%, #ecf2f7 100%)",
     iconBg: "rgba(122,143,160,0.12)",
   },
@@ -109,10 +109,30 @@ const featureData = [
 
 // ─── Steps Data ───────────────────────────────────────────────────
 const steps = [
-  { icon: Activity,    title: "Capture Biométrique", desc: "Capteurs portables mesurant FC, SpO₂ et température en continu, 24h/24.", color: "#4a9d87", bg: "rgba(74,157,135,0.12)" },
-  { icon: Brain,       title: "IA Embarquée",        desc: "Analyse locale par IA — détection sans connexion internet, sans latence réseau.", color: "#3d8c9e", bg: "rgba(61,140,158,0.12)" },
-  { icon: AlertCircle, title: "Anomalie Détectée",   desc: "Schéma critique déclenche l'empaquetage sécurisé avec position GPS.", color: "#c0504a", bg: "rgba(192,80,74,0.10)" },
-  { icon: Radio,       title: "Transmission & Soins", desc: "Données chiffrées envoyées via 4G/GSM → Cloud → alerte instantanée à toute l'équipe.", color: "#6b7fa8", bg: "rgba(107,127,168,0.12)" },
+  {
+    icon: Activity,
+    title: "Capture Biométrique",
+    desc: "Capteurs portables mesurant BPM, SpO₂, température et géolocalisation GPS en continu, 24h/24.",
+    color: "#4a9d87", bg: "rgba(74,157,135,0.12)"
+  },
+  {
+    icon: Radio,
+    title: "Transmission Cloud",
+    desc: "Données envoyées via WiFi vers Supabase toutes les 30 secondes, ou immédiatement en cas de chute détectée.",
+    color: "#3d8c9e", bg: "rgba(61,140,158,0.12)"
+  },
+  {
+    icon: Brain,
+    title: "Analyse par IA",
+    desc: "Chaque mesure déclenche automatiquement le pipeline IA — Random Forest, Autoencoder et moteur de règles cliniques — hébergé sur FastAPI.",
+    color: "#c0504a", bg: "rgba(192,80,74,0.10)"
+  },
+  {
+    icon: AlertCircle,
+    title: "Alerte & Soins",
+    desc: "En cas d'anomalie détectée, une alerte est persistée en base et les dashboards du médecin et du proche sont mis à jour en temps réel.",
+    color: "#6b7fa8", bg: "rgba(107,127,168,0.12)"
+  },
 ];
 
 // ─── Live Badge ───────────────────────────────────────────────────
@@ -273,13 +293,8 @@ export default function Index() {
         .footer-link:hover { color: rgba(160,200,185,0.80); }
       `}</style>
 
-      {/* ══ NAV ══ */}
-      <nav style={{
-        position: "fixed", top: 0, left: 0, right: 0, zIndex: 50,
-        background: "rgba(26,46,40,0.48)",
-        backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)",
-        borderBottom: "1px solid rgba(74,157,135,0.18)",
-      }}>
+      {/* NAV */}
+      <nav style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 50, background: "rgba(26,46,40,0.48)", backdropFilter: "blur(22px)", WebkitBackdropFilter: "blur(22px)", borderBottom: "1px solid rgba(74,157,135,0.18)" }}>
         <div className="container mx-auto flex items-center justify-between h-16 px-6">
           <div className="flex items-center gap-2.5">
             <div style={{ width: "30px", height: "30px", borderRadius: "9px", background: "rgba(74,157,135,0.20)", border: "1px solid rgba(74,157,135,0.40)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -299,16 +314,12 @@ export default function Index() {
         </div>
       </nav>
 
-      {/* ══ HERO ══ */}
+      {/* HERO */}
       <section style={{ position: "relative", minHeight: "100vh", display: "flex", alignItems: "center", overflow: "hidden", paddingTop: "64px" }}>
-
         <div style={{ position: "absolute", inset: 0, zIndex: 0, backgroundImage: "url('https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=1600&q=85&auto=format&fit=crop')", backgroundSize: "cover", backgroundPosition: "center" }} />
         <div style={{ position: "absolute", inset: 0, zIndex: 1, background: "linear-gradient(108deg, rgba(45,30,24,0.92) 0%, rgba(120,98,78,0.70) 35%, rgba(196,178,152,0.38) 62%, rgba(240,232,220,0.14) 82%, transparent 100%)" }} />
-
         <div className="animate-aurora" style={{ position: "absolute", top: "6%", left: "3%", width: "520px", height: "520px", borderRadius: "50%", filter: "blur(130px)", opacity: 0.22, zIndex: 2, background: "radial-gradient(circle, rgba(74,157,135,0.60), transparent 65%)" }} />
         <div className="animate-aurora" style={{ position: "absolute", bottom: "10%", right: "5%", width: "380px", height: "380px", borderRadius: "50%", filter: "blur(120px)", opacity: 0.14, zIndex: 2, animationDelay: "-8s", background: "radial-gradient(circle, rgba(91,143,160,0.45), transparent 65%)" }} />
-
-        {/* ECG layers */}
         <div style={{ position: "absolute", inset: 0, zIndex: 3, pointerEvents: "none", display: "flex", alignItems: "center", opacity: 0.38 }}>
           <svg viewBox="0 0 1400 180" style={{ width: "100%", height: "180px" }} preserveAspectRatio="none">
             <path d="M0 90 L110 90 L128 90 L136 72 L143 90 L150 90 L157 90 L162 22 L166 158 L170 4 L174 176 L178 44 L182 90 L204 90 L224 78 L244 90 L320 90 L450 90 L466 72 L473 90 L480 90 L487 90 L492 22 L496 158 L500 4 L504 176 L508 44 L512 90 L532 90 L552 78 L572 90 L650 90 L780 90 L796 72 L803 90 L810 90 L817 90 L822 22 L826 158 L830 4 L834 176 L838 44 L842 90 L862 90 L882 78 L902 90 L980 90 L1110 90 L1126 72 L1133 90 L1140 90 L1147 90 L1152 22 L1156 158 L1160 4 L1164 176 L1168 44 L1172 90 L1192 90 L1212 78 L1232 90 L1400 90"
@@ -321,19 +332,14 @@ export default function Index() {
               fill="none" stroke="#4a9d87" strokeWidth="2" strokeLinecap="round" className="animate-ecg-loop" style={{ animationDelay: "1.9s" }} />
           </svg>
         </div>
-
         <div className="container mx-auto px-6" style={{ position: "relative", zIndex: 10 }}>
           <div style={{ display: "flex", alignItems: "center" }}>
-
-            {/* LEFT — text */}
             <div style={{ flex: 1, maxWidth: "590px" }}>
-              {/* Badge from file 2 */}
               <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}
                 style={{ display: "inline-flex", alignItems: "center", gap: "8px", padding: "6px 16px", borderRadius: "999px", background: "rgba(74,157,135,0.16)", border: "1px solid rgba(74,157,135,0.32)", marginBottom: "24px" }}>
                 <Shield style={{ width: "14px", height: "14px", color: "#6ecfb5" }} />
                 <span style={{ fontSize: "12px", fontWeight: 600, color: "rgba(200,240,225,0.85)", letterSpacing: "0.05em" }}>Télémédecine Autonome par IA</span>
               </motion.div>
-
               <motion.h1 className="sora" style={{ fontSize: "clamp(2.8rem,5vw,4.3rem)", fontWeight: 800, color: "#ffffff", lineHeight: 1.04, letterSpacing: "-1.5px", marginBottom: "20px" }}>
                 <AnimatedWords text="Votre Santé," delay={0.1} />
                 <br />
@@ -343,12 +349,10 @@ export default function Index() {
                 <br />
                 <AnimatedWords text="Intelligemment." delay={0.65} />
               </motion.h1>
-
               <motion.p initial={{ opacity: 0, y: 18 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.05 }}
                 style={{ maxWidth: "500px", marginBottom: "36px", fontSize: "1.08rem", lineHeight: 1.78, color: "rgba(220,240,232,0.90)", fontWeight: 400 }}>
                 Un système IA portable qui surveille vos constantes vitales 24h/24, détecte les anomalies avant qu'elles ne deviennent des urgences, et connecte votre équipe de soins — où que vous soyez.
               </motion.p>
-
               <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.3 }}
                 style={{ display: "flex", flexWrap: "wrap" as const, gap: "14px" }}>
                 <Link to="/register" className="btn-primary" style={{ padding: "14px 30px", fontSize: "15px" }}>
@@ -359,13 +363,9 @@ export default function Index() {
                 </a>
               </motion.div>
             </div>
-
-            {/* RIGHT — ring visual */}
             <motion.div initial={{ opacity: 0, scale: 0.82 }} animate={{ opacity: 1, scale: 1 }} transition={{ delay: 0.3, duration: 1.1, ease: [0.22, 1, 0.36, 1] }}
               className="hidden lg:block" style={{ position: "relative", flexShrink: 0, marginLeft: "auto", width: "520px", height: "520px" }}>
-
               <div style={{ position: "absolute", inset: "-10px", borderRadius: "50%", background: "radial-gradient(circle, rgba(74,157,135,0.14), transparent 65%)" }} />
-
               <svg className="absolute inset-0 w-full h-full animate-ring" style={{ animationDuration: "28s" }} viewBox="0 0 520 520">
                 <circle cx="260" cy="260" r="248" fill="none" stroke="rgba(74,157,135,0.65)" strokeWidth="2.2" strokeDasharray="8 16" />
               </svg>
@@ -378,10 +378,7 @@ export default function Index() {
               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 520 520">
                 <circle cx="260" cy="260" r="142" fill="none" stroke="rgba(61,140,158,0.18)" strokeWidth="0.9" />
               </svg>
-
-              {/* Center disc */}
               <div style={{ position: "absolute", width: "210px", height: "210px", left: "50%", top: "50%", transform: "translate(-50%,-50%)", background: "rgba(255,255,255,0.92)", border: "1.5px solid rgba(74,157,135,0.26)", borderRadius: "50%", backdropFilter: "blur(16px)", boxShadow: "0 0 52px rgba(74,157,135,0.16), 0 6px 32px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,1)" }} />
-
               <div style={{ position: "absolute", left: "50%", top: "50%", transform: "translate(-50%,-50%)", zIndex: 10, display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
                 <motion.div animate={{ scale: [1, 1.10, 1] }} transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
                   style={{ width: "62px", height: "62px", borderRadius: "50%", marginBottom: "10px", background: "linear-gradient(135deg, rgba(74,157,135,0.18), rgba(91,143,160,0.10))", border: "1.5px solid rgba(74,157,135,0.42)", boxShadow: "0 0 26px rgba(74,157,135,0.30)", display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -395,8 +392,6 @@ export default function Index() {
                   ))}
                 </div>
               </div>
-
-              {/* Floating vital cards */}
               <motion.div initial={{ opacity: 0, x: 16, y: -12 }} animate={{ opacity: 1, x: 0, y: 0 }} transition={{ delay: 0.9, duration: 0.72, ease: [0.22,1,0.36,1] }}
                 style={{ position: "absolute", top: "22px", right: "-14px", animation: "floatA 4.8s ease-in-out infinite" }}>
                 <div style={{ background: "rgba(255,255,255,0.45)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.68)", borderRadius: "18px", boxShadow: "0 8px 28px rgba(26,46,40,0.12), inset 0 1px 0 rgba(255,255,255,0.8)", padding: "13px 18px" }}>
@@ -408,7 +403,6 @@ export default function Index() {
                   </div>
                 </div>
               </motion.div>
-
               <motion.div initial={{ opacity: 0, x: -18 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 1.1, duration: 0.72, ease: [0.22,1,0.36,1] }}
                 style={{ position: "absolute", left: "-30px", top: "50%", animation: "floatLeft 5.2s 0.6s ease-in-out infinite" }}>
                 <div style={{ background: "rgba(255,255,255,0.45)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.68)", borderRadius: "18px", boxShadow: "0 8px 28px rgba(26,46,40,0.12), inset 0 1px 0 rgba(255,255,255,0.8)", padding: "13px 18px" }}>
@@ -419,7 +413,6 @@ export default function Index() {
                   </div>
                 </div>
               </motion.div>
-
               <motion.div initial={{ opacity: 0, x: 16, y: 12 }} animate={{ opacity: 1, x: 0, y: 0 }} transition={{ delay: 1.3, duration: 0.72, ease: [0.22,1,0.36,1] }}
                 style={{ position: "absolute", bottom: "44px", right: "-20px", animation: "floatB 5.6s 1.2s ease-in-out infinite" }}>
                 <div style={{ background: "rgba(255,255,255,0.45)", backdropFilter: "blur(24px)", WebkitBackdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.68)", borderRadius: "18px", boxShadow: "0 8px 28px rgba(26,46,40,0.12), inset 0 1px 0 rgba(255,255,255,0.8)", padding: "13px 18px" }}>
@@ -434,11 +427,10 @@ export default function Index() {
             </motion.div>
           </div>
         </div>
-
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "100px", zIndex: 10, background: `linear-gradient(to top, ${C.cream}, transparent)` }} />
       </section>
 
-      {/* ══ STATS ══ */}
+      {/* STATS */}
       <section style={{ padding: "96px 0", position: "relative", background: "linear-gradient(180deg, #f0ede6 0%, #e8ede9 100%)", overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "radial-gradient(circle, rgba(26,46,40,1) 1px, transparent 1px)", backgroundSize: "32px 32px", pointerEvents: "none" }} />
         <div className="container mx-auto px-6" style={{ position: "relative", zIndex: 1 }}>
@@ -446,7 +438,6 @@ export default function Index() {
             <h2 className="sora" style={{ fontSize: "clamp(2rem,4vw,3.2rem)", fontWeight: 800, color: C.text, marginBottom: "16px", letterSpacing: "-0.8px" }}>Le Problème Que Nous Résolvons</h2>
             <p style={{ color: C.textSoft, fontSize: "1.05rem", maxWidth: "560px", margin: "0 auto" }}>Les maladies cardiovasculaires restent la première cause de mortalité mondiale. La détection précoce sauve des vies.</p>
           </motion.div>
-
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: "24px", maxWidth: "900px", margin: "0 auto" }}>
             {[
               { value: 17900000, suffix: "+",    label: "Décès par an dans le monde liés aux MCV",                    dur: "5s",   delay: "0s",   glow: "rgba(192,80,74,0.10)",   num: "#c0504a" },
@@ -467,7 +458,7 @@ export default function Index() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "80px", background: "linear-gradient(to top, #dde8e2, transparent)" }} />
       </section>
 
-      {/* ══ HOW IT WORKS ══ */}
+      {/* HOW IT WORKS */}
       <section id="how" style={{ padding: "96px 0 80px", position: "relative", background: "linear-gradient(180deg, #dde8e2 0%, #d4dfe8 100%)", overflow: "hidden" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "2px", background: "linear-gradient(90deg, transparent, rgba(74,157,135,0.45), rgba(91,143,160,0.38), transparent)" }} />
         <div className="container mx-auto px-6">
@@ -481,8 +472,6 @@ export default function Index() {
             </h2>
             <p style={{ color: C.textSoft, fontSize: "1.05rem" }}>De votre poignet à votre médecin en quelques secondes. Vraiment.</p>
           </motion.div>
-
-          {/* Steps */}
           <div style={{ maxWidth: "1020px", margin: "0 auto", position: "relative" }}>
             <div className="hidden md:block" style={{ position: "absolute", top: "44px", left: "calc(12.5%)", right: "calc(12.5%)", height: "2px", zIndex: 0, pointerEvents: "none" }}>
               <svg width="100%" height="2" style={{ overflow: "visible" }}>
@@ -500,7 +489,6 @@ export default function Index() {
                 </line>
               </svg>
             </div>
-
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: "16px", position: "relative", zIndex: 1 }}>
               {steps.map((step, i) => {
                 const Icon = step.icon;
@@ -509,70 +497,24 @@ export default function Index() {
                     initial={{ opacity: 0, y: 48 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
                     transition={{ delay: i * 0.18, duration: 0.65, ease: [0.22,1,0.36,1] }}
                     style={{ display: "flex", flexDirection: "column" as const, alignItems: "center" }}>
-
-                    <div style={{
-                      width: "88px", height: "88px", borderRadius: "50%", zIndex: 2, position: "relative",
-                      background: `radial-gradient(circle at 35% 35%, ${step.color}32, ${step.color}10)`,
-                      border: `2px solid ${step.color}50`,
-                      boxShadow: `0 8px 32px ${step.color}30, 0 0 0 6px ${step.color}12`,
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      marginBottom: "-22px",
-                      animation: `iconFloat ${3.5 + i * 0.4}s ease-in-out ${i * 0.5}s infinite`,
-                      backdropFilter: "blur(8px)",
-                      backgroundColor: "rgba(255,252,248,0.22)",
-                    }}>
+                    <div style={{ width: "88px", height: "88px", borderRadius: "50%", zIndex: 2, position: "relative", background: `radial-gradient(circle at 35% 35%, ${step.color}32, ${step.color}10)`, border: `2px solid ${step.color}50`, boxShadow: `0 8px 32px ${step.color}30, 0 0 0 6px ${step.color}12`, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: "-22px", animation: `iconFloat ${3.5 + i * 0.4}s ease-in-out ${i * 0.5}s infinite`, backdropFilter: "blur(8px)", backgroundColor: "rgba(255,252,248,0.22)" }}>
                       {activeStep === i && [0,1].map(r => (
-                        <div key={r} style={{
-                          position: "absolute", inset: 0, borderRadius: "50%",
-                          border: `1.5px solid ${step.color}60`,
-                          animation: `stepRipple 1.8s ease-out ${r * 0.6}s infinite`,
-                        }} />
+                        <div key={r} style={{ position: "absolute", inset: 0, borderRadius: "50%", border: `1.5px solid ${step.color}60`, animation: `stepRipple 1.8s ease-out ${r * 0.6}s infinite` }} />
                       ))}
                       <Icon style={{ width: "34px", height: "34px", color: step.color, filter: `drop-shadow(0 2px 8px ${step.color}55)` }} />
                     </div>
-
-                    <div className={`step-card${activeStep === i ? " active" : ""}`}
-                      style={{ width: "100%", padding: "32px 18px 22px", textAlign: "center" }}>
-
-                      <div style={{
-                        position: "absolute", top: "-30px", left: "50%", transform: "translateX(-50%)",
-                        width: "140px", height: "120px", borderRadius: "50%",
-                        background: `radial-gradient(circle, ${step.color}18, transparent 70%)`,
-                        animation: `bgShift ${4 + i * 0.5}s ease-in-out ${i * 0.8}s infinite`,
-                        pointerEvents: "none",
-                      }} />
-
-                      <div className="sora" style={{
-                        fontSize: "3.5rem", fontWeight: 800, lineHeight: 1,
-                        color: `${step.color}20`,
-                        position: "absolute", top: "8px", right: "12px",
-                        letterSpacing: "-3px",
-                        userSelect: "none" as const,
-                        pointerEvents: "none",
-                      }}>
+                    <div className={`step-card${activeStep === i ? " active" : ""}`} style={{ width: "100%", padding: "32px 18px 22px", textAlign: "center" }}>
+                      <div style={{ position: "absolute", top: "-30px", left: "50%", transform: "translateX(-50%)", width: "140px", height: "120px", borderRadius: "50%", background: `radial-gradient(circle, ${step.color}18, transparent 70%)`, animation: `bgShift ${4 + i * 0.5}s ease-in-out ${i * 0.8}s infinite`, pointerEvents: "none" }} />
+                      <div className="sora" style={{ fontSize: "3.5rem", fontWeight: 800, lineHeight: 1, color: `${step.color}20`, position: "absolute", top: "8px", right: "12px", letterSpacing: "-3px", userSelect: "none" as const, pointerEvents: "none" }}>
                         {String(i + 1).padStart(2, "0")}
                       </div>
-
-                      <div style={{
-                        width: "26px", height: "26px", borderRadius: "50%",
-                        background: `linear-gradient(135deg, ${step.color}ee, ${step.color}88)`,
-                        display: "flex", alignItems: "center", justifyContent: "center",
-                        fontSize: "11px", fontWeight: 800, color: "#fff",
-                        margin: "10px auto 14px",
-                        boxShadow: `0 3px 10px ${step.color}44`,
-                      }}>
+                      <div style={{ width: "26px", height: "26px", borderRadius: "50%", background: `linear-gradient(135deg, ${step.color}ee, ${step.color}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "11px", fontWeight: 800, color: "#fff", margin: "10px auto 14px", boxShadow: `0 3px 10px ${step.color}44` }}>
                         {i + 1}
                       </div>
-
                       <h3 className="sora" style={{ fontSize: "14px", fontWeight: 700, color: C.text, marginBottom: "10px", lineHeight: 1.3 }}>{step.title}</h3>
                       <p style={{ fontSize: "12.5px", color: C.textSoft, lineHeight: 1.65 }}>{step.desc}</p>
-
                       {activeStep === i && (
-                        <div style={{
-                          position: "absolute", bottom: 0, left: 0, right: 0, height: "3px",
-                          background: `linear-gradient(90deg, transparent, ${step.color}, transparent)`,
-                          borderRadius: "0 0 20px 20px",
-                        }} />
+                        <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "3px", background: `linear-gradient(90deg, transparent, ${step.color}, transparent)`, borderRadius: "0 0 20px 20px" }} />
                       )}
                     </div>
                   </motion.div>
@@ -580,8 +522,6 @@ export default function Index() {
               })}
             </div>
           </div>
-
-          {/* Images */}
           <div style={{ maxWidth: "1020px", margin: "80px auto 0", position: "relative", height: "380px" }}>
             <motion.div initial={{ opacity: 0, x: -32 }} whileInView={{ opacity: 1, x: 0 }} viewport={{ once: true }} transition={{ duration: 0.82, ease: [0.22,1,0.36,1] }}
               style={{ position: "absolute", left: 0, top: 0, borderRadius: "28px", overflow: "hidden", height: "340px", width: "58%", boxShadow: "0 24px 64px rgba(26,46,40,0.18)", border: "1px solid rgba(74,157,135,0.20)" }}>
@@ -597,7 +537,6 @@ export default function Index() {
                 <p style={{ color: "rgba(200,230,218,0.65)", fontSize: "13px" }}>Léger, discret, porté en continu.</p>
               </div>
             </motion.div>
-
             <motion.div initial={{ opacity: 0, x: 32, y: 32 }} whileInView={{ opacity: 1, x: 0, y: 0 }} viewport={{ once: true }} transition={{ delay: 0.18, duration: 0.82, ease: [0.22,1,0.36,1] }}
               style={{ position: "absolute", top: "40px", right: 0, width: "46%", borderRadius: "24px", overflow: "hidden", height: "300px", boxShadow: "0 32px 72px rgba(26,46,40,0.20), 0 0 0 1px rgba(74,157,135,0.22)", zIndex: 2 }}>
               <img src="https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=800&q=80&auto=format&fit=crop" alt="Dashboard" style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover" }} />
@@ -613,7 +552,6 @@ export default function Index() {
                 <p style={{ color: "rgba(180,220,210,0.55)", fontSize: "11px" }}>Tableau de bord clinique partagé.</p>
               </div>
             </motion.div>
-
             <motion.div initial={{ opacity: 0, scale: 0.8 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }} transition={{ delay: 0.45, duration: 0.6, ease: [0.22,1,0.36,1] }}
               style={{ position: "absolute", bottom: "0px", left: "50%", transform: "translateX(-50%)", zIndex: 5, animation: "floatA 4s ease-in-out infinite" }}>
               <div style={{ background: "rgba(255,255,255,0.96)", backdropFilter: "blur(20px)", border: "1px solid rgba(74,157,135,0.22)", borderRadius: "16px", padding: "12px 20px", boxShadow: "0 8px 32px rgba(26,46,40,0.14), inset 0 1px 0 white", whiteSpace: "nowrap" as const }}>
@@ -629,7 +567,7 @@ export default function Index() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "90px", background: "linear-gradient(to top, #d4dfe8, transparent)" }} />
       </section>
 
-      {/* ══ FEATURES ══ */}
+      {/* FEATURES */}
       <section id="features" style={{ padding: "96px 0", position: "relative", background: "linear-gradient(180deg, #d4dfe8 0%, #d8e6df 100%)", overflow: "hidden" }}>
         <div className="container mx-auto px-6">
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} style={{ textAlign: "center", marginBottom: "60px" }}>
@@ -640,18 +578,13 @@ export default function Index() {
             {featureData.map((f, i) => {
               const Icon = f.icon;
               return (
-                <motion.div key={i}
-                  initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}
-                  transition={{ delay: i * 0.09, duration: 0.62, ease: [0.22,1,0.36,1] }}
-                  className="feat-card">
+                <motion.div key={i} initial={{ opacity: 0, y: 24 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.09, duration: 0.62, ease: [0.22,1,0.36,1] }} className="feat-card">
                   <div className="shine" />
                   <div style={{ background: f.bg, padding: "26px 22px 18px", position: "relative", overflow: "hidden" }}>
                     <div style={{ position: "absolute", top: "-24px", right: "-24px", width: "110px", height: "110px", borderRadius: "50%", background: `radial-gradient(circle, ${f.accent}22, transparent 70%)`, pointerEvents: "none" }} />
                     <div style={{ position: "absolute", bottom: "-30px", left: "-16px", width: "80px", height: "80px", borderRadius: "50%", background: `radial-gradient(circle, ${f.accent}12, transparent 70%)`, pointerEvents: "none" }} />
                     <div style={{ marginBottom: "18px", position: "relative", zIndex: 1 }}>
-                      <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", background: `${f.accent}18`, border: `1px solid ${f.accent}38`, color: f.accent, textTransform: "uppercase" as const }}>
-                        {f.category}
-                      </span>
+                      <span style={{ display: "inline-block", padding: "3px 10px", borderRadius: "999px", fontSize: "10px", fontWeight: 700, letterSpacing: "0.1em", background: `${f.accent}18`, border: `1px solid ${f.accent}38`, color: f.accent, textTransform: "uppercase" as const }}>{f.category}</span>
                     </div>
                     <div style={{ width: "58px", height: "58px", borderRadius: "16px", background: f.iconBg, border: `1.5px solid ${f.accent}30`, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 6px 20px ${f.accent}1a`, position: "relative", zIndex: 1 }}>
                       <Icon style={{ width: "26px", height: "26px", color: f.accent }} />
@@ -675,7 +608,7 @@ export default function Index() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "90px", background: "linear-gradient(to top, #cdddd5, transparent)" }} />
       </section>
 
-      {/* ══ TESTIMONIALS ══ */}
+      {/* TESTIMONIALS */}
       <section id="testimonials" style={{ padding: "96px 0", position: "relative", background: "linear-gradient(180deg, #cdddd5 0%, #c4d8d0 100%)" }}>
         <div style={{ position: "absolute", top: 0, left: 0, right: 0, height: "1px", background: "linear-gradient(90deg, transparent, rgba(74,157,135,0.40), transparent)" }} />
         <div className="container mx-auto px-6">
@@ -709,15 +642,14 @@ export default function Index() {
         <div style={{ position: "absolute", bottom: 0, left: 0, right: 0, height: "90px", background: "linear-gradient(to top, #1a2e28, transparent)" }} />
       </section>
 
-      {/* ══ CTA ══ */}
+      {/* CTA */}
       <section style={{ padding: "100px 0", position: "relative", overflow: "hidden", background: "linear-gradient(135deg, #1a2e28 0%, #1e3438 50%, #1c302c 100%)" }}>
         <div style={{ position: "absolute", top: "-80px", left: "50%", transform: "translateX(-50%)", width: "700px", height: "300px", borderRadius: "50%", background: "radial-gradient(ellipse, rgba(74,157,135,0.18) 0%, transparent 70%)", filter: "blur(40px)", pointerEvents: "none" }} />
         <div style={{ position: "absolute", inset: 0, opacity: 0.04, backgroundImage: "radial-gradient(circle, rgba(255,255,255,1) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
         <div className="container mx-auto px-6" style={{ textAlign: "center", position: "relative", zIndex: 1 }}>
           <motion.div initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }}>
             <h2 className="sora" style={{ fontSize: "clamp(2rem,4.5vw,3.4rem)", fontWeight: 800, color: "#edf5f0", marginBottom: "18px", letterSpacing: "-1px", lineHeight: 1.1 }}>
-              Commencez à protéger des vies{" "}
-              <span className="gt">aujourd'hui</span>
+              Commencez à protéger des vies{" "}<span className="gt">aujourd'hui</span>
             </h2>
             <p style={{ marginBottom: "40px", maxWidth: "480px", margin: "0 auto 40px", color: "rgba(200,228,215,0.55)", fontSize: "1.05rem" }}>
               Rejoignez les premiers utilisateurs de SmartGuardian et protégez ce qui compte vraiment.
@@ -729,7 +661,7 @@ export default function Index() {
         </div>
       </section>
 
-      {/* ══ FOOTER ══ */}
+      {/* FOOTER */}
       <footer style={{ background: "#121f1a", borderTop: "1px solid rgba(74,157,135,0.14)", padding: "40px 0" }}>
         <div className="container mx-auto px-6" style={{ display: "flex", flexDirection: "row" as const, alignItems: "center", justifyContent: "space-between", gap: "24px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
@@ -747,7 +679,7 @@ export default function Index() {
         </div>
       </footer>
 
-      {/* ══ FOOTER MODALS ══ */}
+      {/* FOOTER MODALS */}
       {modal === "Confidentialité" && (
         <FooterModal title="Politique de Confidentialité" onClose={() => setModal(null)}>
           <p>SmartGuardian collecte uniquement les données nécessaires à la surveillance médicale : constantes vitales, localisation GPS lors d'alertes, et informations de compte.</p>
