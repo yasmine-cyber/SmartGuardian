@@ -162,7 +162,7 @@ const currentStep =
             transition={{ repeat: Infinity, duration: 2.5, ease: "easeInOut" }}
             className="inline-flex items-center gap-2 mb-2"
           >
-            <Heart className="w-8 h-8 text-primary" />
+            <img src="/logo.png" alt="SmartGuardian" className="w-8 h-8" />
             <span className="text-xl font-bold text-foreground">SmartGuardian</span>
           </motion.div>
           {patientName && (

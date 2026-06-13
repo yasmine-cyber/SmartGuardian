@@ -187,7 +187,7 @@ const DashboardLayout = ({ role, children }: DashboardLayoutProps) => {
   const SidebarContent = () => (
     <div className="flex flex-col h-full">
       <div className="flex items-center gap-3 px-4 h-16 border-b border-sidebar-border">
-        <Heart className="w-7 h-7 text-primary flex-shrink-0" />
+        <img src="/logo.png" alt="SmartGuardian" className="w-7 h-7 flex-shrink-0" />
         {!collapsed && <span className="text-lg font-bold text-sidebar-foreground tracking-tight">SmartGuardian</span>}
       </div>
 

@@ -203,7 +203,7 @@ const Register = () => {
                 background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
                 boxShadow: "0 16px 48px rgba(74,157,135,0.35)",
               }}>
-              <Heart className="w-10 h-10 text-white sg-heartbeat" />
+              <img src="/logo.png" alt="SmartGuardian" className="w-10 h-10" />
             </div>
             <h2 className="text-3xl font-bold sg-sora mb-3" style={{ color: C.text }}>
               Smart<span className="sg-gradient-text">Guardian</span>
@@ -239,7 +239,7 @@ const Register = () => {
               <Link to="/" className="inline-flex items-center gap-2">
                 <div className="w-9 h-9 rounded-xl flex items-center justify-center"
                   style={{ background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})` }}>
-                  <Heart className="w-5 h-5 text-white sg-heartbeat" />
+                  <img src="/logo.png" alt="SmartGuardian" className="w-5 h-5" />
                 </div>
                 <span className="text-xl font-bold sg-sora" style={{ color: C.text }}>
                   Smart<span className="sg-gradient-text">Guardian</span>

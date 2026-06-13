@@ -188,7 +188,7 @@ const CompleteProfile = () => {
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md">
 
         <div className="text-center mb-8">
-          <Heart className="w-10 h-10 text-primary mx-auto mb-3 animate-heartbeat" />
+          <img src="/logo.png" alt="SmartGuardian" className="w-10 h-10 text-primary mx-auto mb-3" />
           <h1 className="text-2xl font-bold text-foreground">Compléter votre profil</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {role === "proche"

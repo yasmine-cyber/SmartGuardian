@@ -207,7 +207,7 @@ const FamilyDashboard = () => {
                 background: `linear-gradient(135deg, ${C.gold}, #e8b84b)`,
                 boxShadow: "0 8px 24px rgba(212,168,67,0.32)",
               }}>
-              <Heart className="w-5 h-5 text-white" />
+              <img src="/logo.png" alt="SmartGuardian" className="w-5 h-5" />
             </div>
             <div>
               <h1 className="text-3xl font-bold tracking-tight fd-sora" style={{ color: C.text }}>

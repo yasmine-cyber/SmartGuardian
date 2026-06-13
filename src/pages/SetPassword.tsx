@@ -118,7 +118,7 @@ const SetPassword = () => {
       <div className="hidden lg:flex lg:w-1/2 bg-secondary aurora-bg items-center justify-center p-12 relative">
         <div className="absolute top-1/4 left-1/3 w-[300px] h-[300px] rounded-full bg-primary/8 blur-[100px] animate-aurora" />
         <div className="relative z-10 text-center">
-          <Heart className="w-16 h-16 text-primary mx-auto mb-6 animate-heartbeat" />
+          <img src="/logo.png" alt="SmartGuardian" className="w-16 h-16 mx-auto mb-6" />
           <h2 className="text-3xl font-bold text-foreground mb-3">SmartGuardian</h2>
           <p className="text-muted-foreground text-lg max-w-sm">
             Votre système de télémédecine autonome par intelligence artificielle

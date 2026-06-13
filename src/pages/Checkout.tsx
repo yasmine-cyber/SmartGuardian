@@ -76,7 +76,7 @@ const Checkout = () => {
       <div className="hidden lg:flex lg:w-1/2 bg-secondary aurora-bg items-center justify-center p-12 relative">
         <div className="absolute bottom-1/4 right-1/3 w-[300px] h-[300px] rounded-full bg-primary/8 blur-[100px] animate-aurora" />
         <div className="relative z-10 text-center">
-          <Heart className="w-16 h-16 text-primary mx-auto mb-6 animate-heartbeat" />
+          <img src="/logo.png" alt="SmartGuardian" className="w-16 h-16 mx-auto mb-6" />
           <h2 className="text-3xl font-bold text-foreground mb-3">SmartGuardian</h2>
           <p className="text-muted-foreground text-lg max-w-sm">
             Une dernière étape pour activer votre suivi médical intelligent
@@ -92,7 +92,7 @@ const Checkout = () => {
           className="w-full max-w-md"
         >
           <div className="lg:hidden text-center mb-8">
-            <Heart className="w-8 h-8 text-primary animate-heartbeat mx-auto" />
+            <img src="/logo.png" alt="SmartGuardian" className="w-8 h-8 mx-auto" />
             <span className="text-xl font-bold text-foreground block mt-2">SmartGuardian</span>
           </div>
 

@@ -358,7 +358,7 @@ const FamilyAlerts = () => {
                 background: `linear-gradient(135deg, ${C.primary}, ${C.secondary})`,
                 boxShadow: "0 12px 28px rgba(74,157,135,0.28)",
               }}>
-              <Heart className="w-8 h-8 text-white" />
+              <img src="/logo.png" alt="SmartGuardian" className="w-8 h-8" />
             </div>
             <p className="text-sm font-semibold fa-sora" style={{ color: C.text }}>Aucune alerte pour vos proches</p>
             <p className="text-xs mt-1" style={{ color: C.textSoft }}>Tout va bien ✓</p>
