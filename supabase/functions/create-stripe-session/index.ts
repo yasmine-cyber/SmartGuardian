@@ -15,6 +15,7 @@ serve(async (req: Request) => {
 
   try {
     // ── 1. Vérifier auth ──
+    // Récupérer l'en-tête Authorization
     const authHeader = req.headers.get("Authorization");
     if (!authHeader) return json({ error: "Header Authorization manquant." }, 401);
 
